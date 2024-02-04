@@ -1,26 +1,30 @@
 from langchain.retrievers.multi_vector import MultiVectorRetriever
-from langchain.storage import InMemoryStore
-from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Pinecone
-from haystack.document_stores.faiss import FAISSDocumentStore
-from pinecone import Pinecone, PodSpec
-
+from langchain_community.vectorstores import Pinecone as lc_pinecone
+from pinecone import PodSpec, Pinecone
+from langchain_community.storage import SQLDocStore
 
 import uuid
 import os
 
+
 def get_vectorestore():
-    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    # pinecone.deinitialize()
+
+    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
     index_name = "casperai"
-    if index_name not in pc.list_indexes():
-        pc.create_index(
-            name=index_name,
-            dimension=1536,
-            metric="cosine",
-            spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
-        )
+    indexes = pc.list_indexes()
+    for index_info in indexes.index_list["indexes"]:
+        name_value = index_info["name"]
+        if index_name != name_value:
+            pc.create_index(
+                name=index_name,
+                dimension=1536,
+                metric="euclidean",
+                spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
+            )
 
     index = pc.Index(index_name)
 
@@ -34,7 +38,7 @@ def get_vectorestore():
     )
 
     # Instantiate Pinecone vectorstore
-    vectorstore = Pinecone(index, embed.embed_query, "text")
+    vectorstore = lc_pinecone(index, embed.embed_query, "text")
 
     return vectorstore
 
@@ -47,15 +51,23 @@ def create_multi_vector_retriever(
     # Pinecode vectorstore
     vectorstore = get_vectorestore()
 
-    # Initialize the storage layer
-    # Initialize the SQLite storage layer
-    store = FAISSDocumentStore(sql_url="sqlite:////Users/arjunnair/Workspace/casperai/src/database/doc_store.sqlite", faiss_index_factory_str="Flat")
+    CONNECTION_STRING = "postgresql+psycopg2://localhost:5432/db"
+    #   To start postgresql@14 now and restart at login:
+    #       brew services start postgresql@14
+    #   Or, if you don't want/need a background service you can just run:
+    #       /opt/homebrew/opt/postgresql@14/bin/postgres -D /opt/homebrew/var/postgresql@14
+    COLLECTION_NAME = "casperai"
+    docstore = SQLDocStore(
+        collection_name=COLLECTION_NAME,
+        connection_string=CONNECTION_STRING,
+    )
+
     id_key = "doc_id"
 
     # Create the multi-vector retriever
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore,
-        docstore=store,
+        docstore=docstore,
         id_key=id_key,
     )
 

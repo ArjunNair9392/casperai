@@ -11,7 +11,7 @@ import shutil
 
 
 # Generate summaries of text elements
-def generate_text_summaries(texts, tables, summarize_texts=False):
+def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     load_dotenv()
     """
     Summarize text elements
@@ -19,7 +19,6 @@ def generate_text_summaries(texts, tables, summarize_texts=False):
     tables: List of panda dataframes
     summarize_texts: Bool to summarize texts
     """
-    print("generate_text_summaries in code")
 
     # Prompt
     prompt_text = """You are an assistant tasked with summarizing tables and text for retrieval. \
@@ -28,13 +27,10 @@ def generate_text_summaries(texts, tables, summarize_texts=False):
     about the table or text, we should be able to derive the answer from the table or text summary. \
     Table or text: {element} """
     prompt = ChatPromptTemplate.from_template(prompt_text)
-    print("promt in code")
 
     # Text summary chain
     model = ChatOpenAI(temperature=0, model="gpt-4", openai_api_key=os.environ["OPENAI_API_KEY"])
-    print("model in code")
     summarize_chain = {"element": lambda x: x} | prompt | model | StrOutputParser()
-    print("summarize_chain in code")
     # Initialize empty summaries
     text_summaries = []
     table_summaries = []
@@ -42,18 +38,13 @@ def generate_text_summaries(texts, tables, summarize_texts=False):
 
     # Apply to text if texts are provided and summarization is requested
     if texts and summarize_texts:
-        print("(texts)")
         text_summaries = summarize_chain.batch(texts, {"max_concurrency": 1})
     elif texts:
         text_summaries = texts
-    print("(tables)")
-    print(len(tables))
     # Apply to tables if tables are provided
     if tables:
-        print("(tables) in if")
         table_summaries = summarize_chain.batch(tables, {"max_concurrency": 1})
 
-    print("end code")
 
     return text_summaries, table_summaries
 

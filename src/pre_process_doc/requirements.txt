@@ -33,6 +33,7 @@ effdet==0.4.1
 emoji==2.10.0
 et-xmlfile==1.1.0
 Events==0.5
+faiss-cpu==1.7.4
 farm-haystack==1.24.0
 fastapi==0.109.0
 filelock==3.13.1
@@ -65,7 +66,7 @@ jsonschema-specifications==2023.12.1
 kiwisolver==1.4.5
 kubernetes==29.0.0
 langchain==0.1.4
-langchain-community==0.0.17
+langchain-community==0.0.16
 langchain-core==0.1.17
 langchain-openai==0.0.5
 langdetect==1.0.9
@@ -121,6 +122,7 @@ portalocker==2.8.2
 posthog==3.3.4
 prompthub-py==4.0.0
 protobuf==4.25.2
+psycopg2==2.9.9
 pulsar-client==3.4.0
 pyasn1==0.5.1
 pyasn1-modules==0.3.0
@@ -147,6 +149,7 @@ PyYAML==6.0.1
 quantulum3==0.9.0
 rank-bm25==0.2.2
 rapidfuzz==3.6.1
+redis==5.0.1
 referencing==0.33.0
 regex==2023.12.25
 requests==2.31.0

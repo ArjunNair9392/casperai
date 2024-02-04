@@ -1,7 +1,7 @@
 from unstructured.partition.pdf import partition_pdf
 from langchain.text_splitter import CharacterTextSplitter
 from PIL import Image
-from generate_summaries import generate_text_summaries, generate_img_summaries
+from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
 from retriever import create_multi_vector_retriever
 
 import camelot
@@ -16,7 +16,7 @@ def extract_pdf_elements(fpath, fname):
     """
     return partition_pdf(
         filename=fpath + fname,
-        extract_images_in_pdf=True,
+        extract_images_in_pdf=False,
         infer_table_structure=True,
         chunking_strategy="by_title",
         max_characters=4000,
@@ -49,10 +49,11 @@ def extract_images(img_path):
     
     images = []
     # iterate over files in directory
-    for filename in os.listdir(img_path):
-        if filename.endswith(".jpg"):
-            img = Image.open(os.path.join(img_path, filename))
-            images.append(img)
+    if os.path.exists(img_path):
+        for filename in os.listdir(img_path):
+            if filename.endswith(".jpg"):
+                img = Image.open(os.path.join(img_path, filename))
+                images.append(img)
 
     return images
 
@@ -73,7 +74,7 @@ def convert_tables_to_json(tables):
 def main():
     # File path
     fpath = "/Users/arjunnair/Workspace/casperai/src/content/"
-    fname = "MOSL-Small.pdf"
+    fname = "MOSL-Ex-Small.pdf"
     img_path = "/Users/arjunnair/Workspace/casperai/src/pre_process_doc/figures/"
     # Get elements
     raw_pdf_elements = extract_pdf_elements(fpath, fname)
@@ -85,12 +86,14 @@ def main():
     texts_4k_token = chunkning_texts(texts)
 
     # Get text, table summaries
-    text_summaries, table_summaries = generate_text_summaries(
+    text_summaries, table_summaries = generate_text_and_table_summaries(
         texts_4k_token, tables, summarize_texts=True
     )
 
     # Image summaries
-    img_base64_list, image_summaries = generate_img_summaries(img_path)
+    # img_base64_list, image_summaries = generate_img_summaries(img_path)
+    img_base64_list = []
+    image_summaries = []
     json_tables = convert_tables_to_json(tables)
 
     # Create retriever
