@@ -2,6 +2,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 import io
 import os
 from flask import Flask, request, send_file
@@ -9,25 +10,13 @@ from extraction import extract_summarize_pdf
 
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
-UPLOAD_FOLDER = '/uploads/'
+UPLOAD_FOLDER = '/Users/arjunnair/Workspace/casperai/src/pre_process_doc/uploads/'
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return 'No file part in the request', 400
-    file = request.files['file']
-    if file.filename == '':
-        return 'No file selected for uploading', 400
-    if file:
-        filename = file.filename
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        return 'File successfully uploaded', 200
 
 @app.route('/get-drive-folder/<folder_id>', methods=['GET'])
 def get_drive_folder(folder_id):
@@ -43,7 +32,7 @@ def get_drive_folder(folder_id):
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'C:\Project\converseai-main\service\credentials.json', SCOPES)
+                '/credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
         with open('token.json', 'w') as token:

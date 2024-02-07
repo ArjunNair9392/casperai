@@ -73,10 +73,9 @@ def convert_tables_to_json(tables):
 
 def extract_summarize_pdf(fpath, fname):
     # File path
-    img_path = "C:\Project\casperai\src\pre_process_doc\figures/"
+    img_path = "/figures/"
     # Get elements
     raw_pdf_elements = extract_pdf_elements(fpath, fname)
-    print("line 80")
     # Get text, tables
     texts = extract_texts(raw_pdf_elements)
     tables = extract_tables(fpath, fname)
@@ -104,5 +103,5 @@ def extract_summarize_pdf(fpath, fname):
         img_base64_list,
     )
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()

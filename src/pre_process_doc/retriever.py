@@ -1,5 +1,6 @@
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from langchain_core.documents import Document
+from langchain.storage import InMemoryStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Pinecone as lc_pinecone
 from pinecone import PodSpec, Pinecone
@@ -15,16 +16,16 @@ def get_vectorestore():
 
     pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
     index_name = "casperai"
-    indexes = pc.list_indexes()
-    for index_info in indexes.index_list["indexes"]:
-        name_value = index_info["name"]
-        if index_name != name_value:
-            pc.create_index(
-                name=index_name,
-                dimension=1536,
-                metric="euclidean",
-                spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
-            )
+    # indexes = pc.list_indexes()
+    # for index_info in indexes.index_list["indexes"]:
+    #     name_value = index_info["name"]
+    # if index_name != name_value:
+    pc.create_index(
+        name=index_name,
+        dimension=1536,
+        metric="euclidean",
+        spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
+    )
 
     index = pc.Index(index_name)
 
@@ -51,23 +52,24 @@ def create_multi_vector_retriever(
     # Pinecode vectorstore
     vectorstore = get_vectorestore()
 
-    CONNECTION_STRING = "postgresql+psycopg2://localhost:5432/db"
-    #   To start postgresql@14 now and restart at login:
-    #       brew services start postgresql@14
-    #   Or, if you don't want/need a background service you can just run:
-    #       /opt/homebrew/opt/postgresql@14/bin/postgres -D /opt/homebrew/var/postgresql@14
-    COLLECTION_NAME = "casperai"
-    docstore = SQLDocStore(
-        collection_name=COLLECTION_NAME,
-        connection_string=CONNECTION_STRING,
-    )
+    # CONNECTION_STRING = "postgresql+psycopg2://localhost:5432/db"
+    # #   To start postgresql@14 now and restart at login:
+    # #       brew services start postgresql@14
+    # #   Or, if you don't want/need a background service you can just run:
+    # #       /opt/homebrew/opt/postgresql@14/bin/postgres -D /opt/homebrew/var/postgresql@14
+    # COLLECTION_NAME = "casperai"
+    # docstore = SQLDocStore(
+    #     collection_name=COLLECTION_NAME,
+    #     connection_string=CONNECTION_STRING,
+    # )
 
     id_key = "doc_id"
+    store = InMemoryStore()
 
     # Create the multi-vector retriever
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore,
-        docstore=docstore,
+        docstore=store,
         id_key=id_key,
     )
 
