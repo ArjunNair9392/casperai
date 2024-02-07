@@ -198,3 +198,8 @@ xlrd==2.0.1
 XlsxWriter==3.1.9
 yarl==1.9.4
 zipp==3.17.0
+flask==2.0.3
+werkzeug==2.0.2
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

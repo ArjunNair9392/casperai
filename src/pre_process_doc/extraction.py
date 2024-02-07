@@ -71,14 +71,12 @@ def convert_tables_to_json(tables):
     json_tables = [df.to_json(orient='records') for df in tables]
     return json_tables
 
-def main():
+def extract_summarize_pdf(fpath, fname):
     # File path
-    fpath = "/Users/arjunnair/Workspace/casperai/src/content/"
-    fname = "MOSL-Ex-Small.pdf"
-    img_path = "/Users/arjunnair/Workspace/casperai/src/pre_process_doc/figures/"
+    img_path = "C:\Project\casperai\src\pre_process_doc\figures/"
     # Get elements
     raw_pdf_elements = extract_pdf_elements(fpath, fname)
-
+    print("line 80")
     # Get text, tables
     texts = extract_texts(raw_pdf_elements)
     tables = extract_tables(fpath, fname)
