@@ -29,7 +29,7 @@ def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     prompt = ChatPromptTemplate.from_template(prompt_text)
 
     # Text summary chain
-    model = ChatOpenAI(temperature=0, model="gpt-4", openai_api_key=os.environ["OPENAI_API_KEY"])
+    model = ChatOpenAI(temperature=0, model="gpt-4", openai_api_key="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")
     summarize_chain = {"element": lambda x: x} | prompt | model | StrOutputParser()
     # Initialize empty summaries
     text_summaries = []

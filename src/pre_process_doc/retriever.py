@@ -14,20 +14,24 @@ def get_vectorestore():
     # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     # pinecone.deinitialize()
 
-    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
+    pc = Pinecone( api_key="00644595-2a4e-4d0f-8c63-1f22f1b7332a" )
     index_name = "casperai"
-    # indexes = pc.list_indexes()
-    # for index_info in indexes.index_list["indexes"]:
-    #     name_value = index_info["name"]
-    # if index_name != name_value:
-    pc.create_index(
-        name=index_name,
-        dimension=1536,
-        metric="euclidean",
-        spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
-    )
-
-    index = pc.Index(index_name)
+    indexes = pc.list_indexes().names()
+    print("Indexes: ")
+    print(indexes)
+    if index_name in indexes:
+        print("Pinecode index found")
+        index = pc.Index(index_name)
+    else:
+        # Create the index in case it doesn't exist
+        print("Pinecode index not found, creating one")
+        pc.create_index(
+            name=index_name,
+            dimension=1536,
+            metric="euclidean",
+            spec=PodSpec(environment="gcp-starter")
+        )
+        index = pc.Index(index_name)
 
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
@@ -35,7 +39,7 @@ def get_vectorestore():
 
     embed = OpenAIEmbeddings(
         model=model_name,
-        openai_api_key=OPENAI_API_KEY
+        openai_api_key="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"
     )
 
     # Instantiate Pinecone vectorstore
@@ -63,13 +67,21 @@ def create_multi_vector_retriever(
     #     connection_string=CONNECTION_STRING,
     # )
 
+    CONNECTION_STRING = "postgresql+psycopg2://postgres:test@localhost:5432/mydatabase"
+    COLLECTION_NAME = "casperai"
+
+    docstore = SQLDocStore(
+        collection_name=COLLECTION_NAME,
+        connection_string=CONNECTION_STRING,
+    )
+    print("Connection to PostgreSQL DB successful")
     id_key = "doc_id"
-    store = InMemoryStore()
+    #store = InMemoryStore()
 
     # Create the multi-vector retriever
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore,
-        docstore=store,
+        docstore=docstore,
         id_key=id_key,
     )
 
