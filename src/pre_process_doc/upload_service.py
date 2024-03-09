@@ -1,5 +1,5 @@
 import flask
-from flask import request, Flask
+from flask import request, Flask, jsonify
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -73,6 +73,33 @@ def get_drive_folder():
             extract_summarize_pdf(app.config['UPLOAD_FOLDER'], file_info['name'], companyId)
 
     return 'Files downloaded and saved from the folder', 200
+
+@app.route('/listFiles', methods=['GET'])
+def list_files():
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.json'):
+        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                '/credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.json', 'w') as token:
+            token.write(creds.to_json())
+
+    service = build('drive', 'v3', credentials=creds)
+
+    results = service.files().list(
+        pageSize=10, fields="nextPageToken, files(id, name)").execute()
+    items = results.get('files', [])
+
+    return jsonify(items)
 
 def persistDocumentMetaData(db, documentId, docName, docUrl, companyId):
     MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
