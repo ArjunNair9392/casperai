@@ -10,12 +10,12 @@ import uuid
 import os
 
 
-def get_vectorestore():
+def get_vectorestore(indexName):
     # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     # pinecone.deinitialize()
 
     pc = Pinecone( api_key="00644595-2a4e-4d0f-8c63-1f22f1b7332a" )
-    index_name = "casperai"
+    index_name = indexName
     indexes = pc.list_indexes().names()
     print("Indexes: ")
     print(indexes)
@@ -48,13 +48,13 @@ def get_vectorestore():
     return vectorstore
 
 def create_multi_vector_retriever(
-    text_summaries, texts, table_summaries, tables, image_summaries, images
+    text_summaries, texts, table_summaries, tables, image_summaries, images, indexName
 ):
     """
     Create retriever that indexes summaries, but returns raw images or texts
     """
     # Pinecode vectorstore
-    vectorstore = get_vectorestore()
+    vectorstore = get_vectorestore(indexName)
 
     # CONNECTION_STRING = "postgresql+psycopg2://localhost:5432/db"
     # #   To start postgresql@14 now and restart at login:
@@ -68,7 +68,7 @@ def create_multi_vector_retriever(
     # )
 
     CONNECTION_STRING = "postgresql+psycopg2://postgres:test@localhost:5432/mydatabase"
-    COLLECTION_NAME = "casperai"
+    COLLECTION_NAME = indexName
 
     docstore = SQLDocStore(
         collection_name=COLLECTION_NAME,

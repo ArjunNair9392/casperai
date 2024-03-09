@@ -1,3 +1,5 @@
+import flask
+from flask import request, Flask
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -5,7 +7,6 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 import io
 import os
-from flask import Flask, request, send_file
 from pymongo import MongoClient
 from extraction import extract_summarize_pdf
 
@@ -19,8 +20,13 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-@app.route('/get-drive-folder/<folder_id>', methods=['GET'])
-def get_drive_folder(folder_id):
+
+@app.route('/processFiles', methods=['POST'])
+def get_drive_folder():
+    data = flask.request.get_json()
+    fileIds = data.get('fileIds', [])
+    companyId = data.get('companyId')
+    print(f'companyId: {companyId}')
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -41,37 +47,34 @@ def get_drive_folder(folder_id):
 
     # Call the Drive v3 API
     service = build('drive', 'v3', credentials=creds)
-
-    # List all files in the folder
-    results = service.files().list(fields='files(id, name, parents, webViewLink, mimeType )', q=f"'{folder_id}' in parents").execute()
-    items = results.get('files', [])
     db = connectToMongoDB()
+    for fileId in fileIds:
+        print(f'Processing id: {id}')
+        file_info = service.files().get(fileId=fileId, fields='id, name, parents, webViewLink, mimeType').execute()
 
-    if not items:
-        print('No files found.')
-    else:
-        for item in items:
-            # Only download files that are pdfs
-            if item['mimeType'] == 'application/pdf':
-                request = service.files().get_media(fileId=item['id'])
-                fh = io.BytesIO()
-                downloader = MediaIoBaseDownload(fh, request)
-                done = False
-                while done is False:
-                    status, done = downloader.next_chunk()
+        # Request the file content
+        request_file_content = service.files().get_media(fileId=fileId)
+        if file_info['mimeType'] == 'application/pdf':
+            request = service.files().get_media(fileId=file_info['id'])
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
 
-                # Save the downloaded file in UPLOAD_FOLDER
-                path = os.path.join(app.config['UPLOAD_FOLDER'], item['name'])
-                with open(path, 'wb') as f:
-                    f.write(fh.getbuffer())
+            # Save the downloaded file in UPLOAD_FOLDER
+            path = os.path.join(app.config['UPLOAD_FOLDER'], file_info['name'])
+            with open(path, 'wb') as f:
+                f.write(fh.getbuffer())
 
-                persistDocumentMetaData(db, item["id"], item["name"], item["webViewLink"], folder_id)
-                print(f'PDF file {item["name"]} downloaded and saved at : {path}')
-                extract_summarize_pdf(app.config['UPLOAD_FOLDER'], item['name'])
+            persistDocumentMetaData(db, file_info["id"], file_info["name"], file_info["webViewLink"], companyId)
+            print(f'PDF file {file_info["name"]} downloaded and saved at : {path}')
+
+            extract_summarize_pdf(app.config['UPLOAD_FOLDER'], file_info['name'], companyId)
 
     return 'Files downloaded and saved from the folder', 200
 
-def persistDocumentMetaData(db, documentId, docName, docUrl, folder):
+def persistDocumentMetaData(db, documentId, docName, docUrl, companyId):
     MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
     try:
         collection = db['documents']
@@ -81,11 +84,12 @@ def persistDocumentMetaData(db, documentId, docName, docUrl, folder):
             'docId': documentId,
             'docName': docName,
             'docUrl': docUrl,
-            'parentFolder': folder
+            'companyId': companyId
         }
 
         # Insert the document into the collection
         insert_result = collection.insert_one(document)
+
         print(f'Inserted doc: {documentId} to documents collection')
     except Exception as e:
         print(f'Failed to insert doc: {documentId} to documents collection')

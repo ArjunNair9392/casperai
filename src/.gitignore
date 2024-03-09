@@ -124,6 +124,7 @@ celerybeat.pid
 .venv
 env/
 src/.env
+src/pre_process_doc/uploads
 venv/
 ENV/
 env.bak/
@@ -160,3 +161,6 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+https://drive.google.
+{"_id":{"$oid":"65e028a73e7c1d16a0b677fb"},"docId":"1g5uQwWq1sMPfbuxwavYJwUMErPPLNkqk","docName":"MOSL-Ex-Small.pdf","docUrl":"https://drive.google.com/file/d/1g5uQwWq1sMPfbuxwavYJwUMErPPLNkqk/view?usp=drivesdk","parentFolder":"1nt9YKdBmNzeRlZW2jBWie_q72Nm6UYoc"}
