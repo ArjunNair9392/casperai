@@ -26,23 +26,25 @@ def get_drive_folder():
     data = flask.request.get_json()
     fileIds = data.get('fileIds', [])
     companyId = data.get('companyId')
+    userId = data.get('userId')
     print(f'companyId: {companyId}')
+    token_file = "token/token_{}.json".format(userId)
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    if os.path.exists(token_file):
+        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                '/credentials.json', SCOPES)
+                'token/credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open('token.json', 'w') as token:
+        with open(token_file, 'w') as token:
             token.write(creds.to_json())
 
     # Call the Drive v3 API
@@ -76,27 +78,31 @@ def get_drive_folder():
 
 @app.route('/listFiles', methods=['GET'])
 def list_files():
+    userId = request.args.get('userId')
+    token_file = "token/token_{}.json".format(userId)
+    creds = None
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    print(f'token_file {token_file}')
+    if os.path.exists(token_file):
+        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                '/credentials.json', SCOPES)
+                'token/credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open('token.json', 'w') as token:
+        with open(token_file, 'w') as token:
             token.write(creds.to_json())
 
     service = build('drive', 'v3', credentials=creds)
 
     results = service.files().list(
-        pageSize=10, fields="nextPageToken, files(id, name)").execute()
+        pageSize=10, fields="nextPageToken, files(id, name, webViewLink)").execute()
     items = results.get('files', [])
 
     return jsonify(items)
