@@ -125,7 +125,7 @@ celerybeat.pid
 env/
 src/.env
 src/pre_process_doc/uploads
-src/pre_process_doc/token
+src/pre_process_doc/token/
 venv/
 ENV/
 env.bak/
