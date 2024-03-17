@@ -4,16 +4,25 @@ from langchain_core.messages import HumanMessage
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from PIL import Image
+import flask
+from flask import request, Flask, jsonify
+from langchain_community.vectorstores import Pinecone as lc_pinecone
+from langchain_openai import OpenAIEmbeddings
+from langchain.retrievers.multi_vector import MultiVectorRetriever
+from pinecone import PodSpec, Pinecone
+from langchain_community.storage import SQLDocStore
 
 import io
 import re
 import base64
 import pandas as pd
+from pymongo import MongoClient
+import os
 
-
-
+app = Flask(__name__)
 def looks_like_base64(sb):
-    """Check if the string looks like base64"""
+    if not isinstance(sb, str):
+        return False
     return re.match("^[A-Za-z0-9+/]+[=]{0,2}$", sb) is not None
 
 
@@ -82,7 +91,7 @@ def img_prompt_func(data_dict):
     Join the context into a single string
     """
 
-    formatted_texts = "\n".join(data_dict["context"]["texts"])
+    formatted_texts = "\n".join([str(elem) for sublist in data_dict["context"]["texts"] for elem in sublist])
     messages = []
 
 
@@ -128,7 +137,7 @@ def multi_modal_rag_chain(retriever):
     """
 
     # Multi-modal LLM
-    model = ChatOpenAI(temperature=0, model="gpt-4-vision-preview", max_tokens=1024)
+    model = ChatOpenAI(temperature=0, model="gpt-4-vision-preview", max_tokens=1024, openai_api_key="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")
 
     # RAG pipeline
     chain = (
@@ -142,3 +151,92 @@ def multi_modal_rag_chain(retriever):
     )
 
     return chain
+
+
+def fetchIndexName(user_id):
+    MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+    try:
+        client = MongoClient(MONGODB_URI)
+        db = client['Casperai']
+        print("Connected successfully")
+        user_collection = db['users']  # Use your collection name here
+
+        user_data = user_collection.find_one({'userId': user_id})
+        return user_data['companyId']
+    except Exception as e:
+        print("Failed to connect to MongoDB")
+        print(e)
+
+def get_vectorestore(indexName):
+    # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    # pinecone.deinitialize()
+
+    pc = Pinecone( api_key="00644595-2a4e-4d0f-8c63-1f22f1b7332a" )
+    index_name = indexName
+    indexes = pc.list_indexes().names()
+    if index_name in indexes:
+        print("Pinecode index found")
+        index = pc.Index(index_name)
+    else:
+        # Create the index in case it doesn't exist
+        print("Pinecode index not found, creating one")
+        pc.create_index(
+            name=index_name,
+            dimension=1536,
+            metric="euclidean",
+            spec=PodSpec(environment="gcp-starter")
+        )
+        index = pc.Index(index_name)
+
+    #OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+    model_name = 'text-embedding-ada-002'
+
+    embed = OpenAIEmbeddings(
+        model=model_name,
+        openai_api_key="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"
+    )
+
+    # Instantiate Pinecone vectorstore
+    vectorstore = lc_pinecone(index, embed.embed_query, "text")
+
+    return vectorstore
+def getRetriever(indexName):
+    vectorstore = get_vectorestore(indexName)
+
+    CONNECTION_STRING = "postgresql+psycopg2://postgres:test@localhost:5432/mydatabase"
+    COLLECTION_NAME = indexName
+
+    docstore = SQLDocStore(
+        collection_name=COLLECTION_NAME,
+        connection_string=CONNECTION_STRING,
+    )
+    print("Connection to PostgreSQL DB successful")
+    id_key = "doc_id"
+
+    # Create the multi-vector retriever
+    retriever = MultiVectorRetriever(
+        vectorstore=vectorstore,
+        docstore=docstore,
+        id_key=id_key,
+    )
+
+    return retriever
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = flask.request.get_json()
+    userId = data.get('userId')
+    query = data.get('query')
+    indexName = fetchIndexName(userId)
+    retriever = getRetriever(indexName)
+    docs = retriever.get_relevant_documents(query, limit=6)
+    chain_multimodal_rag = multi_modal_rag_chain(retriever)
+    response = chain_multimodal_rag.invoke(query)
+    return jsonify(response)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
+
+# chain_multimodal_rag.invoke(query)
+# query = "SRF PAT in 2013"
+# docs = retriever_multi_vector_img.get_relevant_documents(query, limit=6)
