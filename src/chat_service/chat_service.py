@@ -131,13 +131,13 @@ def img_prompt_func(data_dict):
     }
     messages.append(text_message)
     return [HumanMessage(content=messages)]
+    
 def multi_modal_rag_chain(retriever):
     """
     Multi-modal RAG chain
     """
-
     # Multi-modal LLM
-    model = ChatOpenAI(temperature=0, model="gpt-4-vision-preview", max_tokens=1024, openai_api_key="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")
+    model = ChatOpenAI(temperature=0, model="gpt-4-vision-preview", max_tokens=1024, openai_api_key=os.getenv("OPENAI_API_KEY"))
 
     # RAG pipeline
     chain = (
@@ -171,7 +171,7 @@ def get_vectorestore(indexName):
     # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     # pinecone.deinitialize()
 
-    pc = Pinecone( api_key="00644595-2a4e-4d0f-8c63-1f22f1b7332a" )
+    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
     index_name = indexName
     indexes = pc.list_indexes().names()
     if index_name in indexes:
@@ -184,7 +184,7 @@ def get_vectorestore(indexName):
             name=index_name,
             dimension=1536,
             metric="euclidean",
-            spec=PodSpec(environment="gcp-starter")
+            spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
         )
         index = pc.Index(index_name)
 
@@ -194,7 +194,7 @@ def get_vectorestore(indexName):
 
     embed = OpenAIEmbeddings(
         model=model_name,
-        openai_api_key="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"
+        openai_api_key=os.getenv("OPENAI_API_KEY")
     )
 
     # Instantiate Pinecone vectorstore
@@ -204,7 +204,7 @@ def get_vectorestore(indexName):
 def getRetriever(indexName):
     vectorstore = get_vectorestore(indexName)
 
-    CONNECTION_STRING = "postgresql+psycopg2://postgres:test@localhost:5432/mydatabase"
+    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
     COLLECTION_NAME = indexName
 
     docstore = SQLDocStore(
@@ -229,14 +229,21 @@ def chat():
     query = data.get('query')
     indexName = fetchIndexName(userId)
     retriever = getRetriever(indexName)
-    docs = retriever.get_relevant_documents(query, limit=6)
-    chain_multimodal_rag = multi_modal_rag_chain(retriever)
-    response = chain_multimodal_rag.invoke(query)
+    last_item = query[-1]
+    # Extract and remove the last element with role="user" as question
+    if last_item['role'] == 'user':
+        question = last_item['content']
+        query.pop()  # Remove the last item from the list
+    else:
+        question = None
+
+    history = query
+    history_aware_retriever = lambda query: (retriever.get_relevant_documents(question), history)
+    chain_multimodal_rag = multi_modal_rag_chain(history_aware_retriever)
+    response = chain_multimodal_rag.invoke({
+        'question' : question
+    })
     return jsonify(response)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
-# chain_multimodal_rag.invoke(query)
-# query = "SRF PAT in 2013"
-# docs = retriever_multi_vector_img.get_relevant_documents(query, limit=6)
