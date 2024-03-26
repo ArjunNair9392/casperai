@@ -11,10 +11,7 @@ import os
 
 
 def get_vectorestore(indexName):
-    # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    # pinecone.deinitialize()
-
-    pc = Pinecone( api_key="00644595-2a4e-4d0f-8c63-1f22f1b7332a" )
+    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
     index_name = indexName
     indexes = pc.list_indexes().names()
     print("Indexes: ")
@@ -29,17 +26,15 @@ def get_vectorestore(indexName):
             name=index_name,
             dimension=1536,
             metric="euclidean",
-            spec=PodSpec(environment="gcp-starter")
+            spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
         )
         index = pc.Index(index_name)
-
-    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
     model_name = 'text-embedding-ada-002'
 
     embed = OpenAIEmbeddings(
         model=model_name,
-        openai_api_key="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"
+        openai_api_key=os.getenv("OPENAI_API_KEY")
     )
 
     # Instantiate Pinecone vectorstore
