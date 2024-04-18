@@ -88,9 +88,7 @@ def extract_summarize_pdf(fpath, fname, indexName):
     )
 
     # Image summaries
-    # img_base64_list, image_summaries = generate_img_summaries(img_path)
-    img_base64_list = []
-    image_summaries = []
+    img_base64_list, image_summaries = generate_img_summaries(img_path)
     json_tables = convert_tables_to_json(tables)
 
     # Create retriever

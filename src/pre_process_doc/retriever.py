@@ -62,7 +62,7 @@ def create_multi_vector_retriever(
     #     connection_string=CONNECTION_STRING,
     # )
 
-    CONNECTION_STRING = "postgresql+psycopg2://postgres:test@localhost:5432/mydatabase"
+    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
     COLLECTION_NAME = indexName
 
     docstore = SQLDocStore(

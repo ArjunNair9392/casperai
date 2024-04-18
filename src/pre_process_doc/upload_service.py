@@ -1,6 +1,5 @@
 import flask
 from flask import request, Flask, jsonify
-from flask_cors import CORS
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -16,7 +15,6 @@ SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 UPLOAD_FOLDER = './uploads/'
 
 app = Flask(__name__)
-CORS(app) 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 if not os.path.exists(UPLOAD_FOLDER):

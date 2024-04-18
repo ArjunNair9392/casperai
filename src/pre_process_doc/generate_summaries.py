@@ -56,7 +56,7 @@ def encode_image(image_path):
 
 def image_summarize(img_base64, prompt):
     """Make image summary"""
-    chat = ChatOpenAI(model="gpt-4-vision-preview", max_tokens=1024, openai_api_key=os.environ["OPENAI_API_KEY"])
+    chat = ChatOpenAI(model="gpt-4-vision-preview", max_tokens=1024, openai_api_key=os.getenv["OPENAI_API_KEY"])
 
     msg = chat.invoke(
         [
