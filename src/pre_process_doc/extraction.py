@@ -16,7 +16,7 @@ def extract_pdf_elements(fpath, fname):
     """
     return partition_pdf(
         filename=fpath + fname,
-        extract_images_in_pdf=False,
+        extract_images_in_pdf=True,
         infer_table_structure=True,
         chunking_strategy="by_title",
         max_characters=4000,

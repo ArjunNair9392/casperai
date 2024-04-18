@@ -27,7 +27,6 @@ def get_drive_folder():
     fileIds = data.get('fileIds', [])
     companyId = data.get('companyId')
     userId = data.get('userId')
-    print(f'companyId: {companyId}')
     token_file = "token/token_{}.json".format(userId)
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
@@ -51,7 +50,6 @@ def get_drive_folder():
     service = build('drive', 'v3', credentials=creds)
     db = connectToMongoDB()
     for fileId in fileIds:
-        print(f'Processing id: {id}')
         file_info = service.files().get(fileId=fileId, fields='id, name, parents, webViewLink, mimeType').execute()
 
         # Request the file content
@@ -70,7 +68,6 @@ def get_drive_folder():
                 f.write(fh.getbuffer())
 
             persistDocumentMetaData(db, file_info["id"], file_info["name"], file_info["webViewLink"], companyId)
-            print(f'PDF file {file_info["name"]} downloaded and saved at : {path}')
 
             extract_summarize_pdf(app.config['UPLOAD_FOLDER'], file_info['name'], companyId)
 
@@ -84,7 +81,6 @@ def list_files():
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    print(f'token_file {token_file}')
     if os.path.exists(token_file):
         creds = Credentials.from_authorized_user_file(token_file, SCOPES)
     # If there are no (valid) credentials available, let the user log in.
@@ -123,7 +119,6 @@ def persistDocumentMetaData(db, documentId, docName, docUrl, companyId):
         # Insert the document into the collection
         insert_result = collection.insert_one(document)
 
-        print(f'Inserted doc: {documentId} to documents collection')
     except Exception as e:
         print(f'Failed to insert doc: {documentId} to documents collection')
         print(e)

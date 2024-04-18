@@ -51,18 +51,7 @@ def create_multi_vector_retriever(
     # Pinecode vectorstore
     vectorstore = get_vectorestore(indexName)
 
-    # CONNECTION_STRING = "postgresql+psycopg2://localhost:5432/db"
-    # #   To start postgresql@14 now and restart at login:
-    # #       brew services start postgresql@14
-    # #   Or, if you don't want/need a background service you can just run:
-    # #       /opt/homebrew/opt/postgresql@14/bin/postgres -D /opt/homebrew/var/postgresql@14
-    # COLLECTION_NAME = "casperai"
-    # docstore = SQLDocStore(
-    #     collection_name=COLLECTION_NAME,
-    #     connection_string=CONNECTION_STRING,
-    # )
-
-    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
+    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"#"postgresql+psycopg2://postgres:test@localhost:5432/mydatabase"
     COLLECTION_NAME = indexName
 
     docstore = SQLDocStore(

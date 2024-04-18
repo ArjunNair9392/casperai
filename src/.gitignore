@@ -127,6 +127,7 @@ env/
 src/.env
 src/pre_process_doc/uploads
 src/pre_process_doc/token/
+src/pre_process_doc/figures/
 venv/
 ENV/
 env.bak/
