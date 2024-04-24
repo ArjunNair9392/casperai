@@ -6,7 +6,6 @@ from retriever import create_multi_vector_retriever
 
 import camelot
 import os
-import fitz
 
 def extract_pdf_elements(file_path, file_name):
     """

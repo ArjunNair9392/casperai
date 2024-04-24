@@ -11,6 +11,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from pymongo import MongoClient
+import requests
+
 
 # Define Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
@@ -33,7 +35,7 @@ def process_files():
     file_ids = data.get('fileIds', [])
     company_id = data.get('companyId')
     user_id = data.get('userId')
-    creds = get_google_drive_credentials(user_id)
+    creds = get_google_drive_credentials(user_id, "")
     service = build('drive', 'v3', credentials=creds)
     db = connect_to_mongodb()
 
@@ -53,8 +55,9 @@ def process_files():
 @app.route('/listFiles', methods=['GET'])
 def list_files():
     user_id = request.args.get('userId')
+    code = request.args.get('code')
     print(f"User id we are pulling the file for for file is '{user_id}'")
-    creds = get_google_drive_credentials(user_id)
+    creds = get_google_drive_credentials(user_id, code)
     service = build('drive', 'v3', credentials=creds)
     files = get_files_from_drive(service)
     print("Files retrieved successfully from Google Drive")
@@ -72,18 +75,33 @@ def get_files_from_drive(service):
         return []
 
 # Function to fetch Google Drive credentials
-def get_google_drive_credentials(user_id):
-    token_file = f"token/token_{user_id}.json"
-    creds = None
+def get_google_drive_credentials(user_id, code):
+    db = connect_to_mongodb()
 
-    if os.path.exists(token_file):
-        creds = Credentials.from_authorized_user_file(token_file, SCOPES)
+    result = fetch_token(db, user_id)
+    if result:
+        print("found token in DB")
+        token = result["token"]
+        refresh_token = result["refresh_token"]
 
+    else:
+        print("fetching token from google api")
+        token_result = get_token(code)
+        token = token_result.get("access_token")
+        refresh_token = token_result.get("refresh_token")
+        persist_token(db, user_id, token, refresh_token)
+
+    creds = Credentials(
+            token=token,
+            refresh_token=refresh_token,
+            token_uri="https://www.googleapis.com/oauth2/v3/token",
+            client_id="771148068297-ke9e4o4c7gjhduggsi2cu1tgtmgelav2.apps.googleusercontent.com",  #os.getenv("GOOGLE_CLIENT_ID"),
+            client_secret="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" #os.getenv("GOOGLE_CLIENT_SECRET"),
+        )
+    # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-        else:
-            creds = refresh_credentials(token_file)
 
     return creds
 
@@ -140,6 +158,65 @@ def persist_document_metadata(db, file_info, company_id, processed=False):
         collection.insert_one(document)
     except Exception as e:
         print(f'Failed to insert document: {file_info["id"]} to documents collection')
+        print(e)
+
+def get_token(code):
+    try:
+        url = "https://oauth2.googleapis.com/token"
+        params = {
+            "code": code,
+            "client_id": "771148068297-ke9e4o4c7gjhduggsi2cu1tgtmgelav2.apps.googleusercontent.com",
+            "client_secret": "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",
+            "grant_type": "authorization_code",
+            "redirect_uri": "http://localhost:8080/test"
+        }
+        response = requests.post(url, params=params)
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            print("POST request successful!")
+            data =response.json()
+            return data
+        else:
+            print("POST request failed with status code:", response.status_code)
+    except Exception as e:
+        print("An error occurred:", str(e))
+
+def fetch_token(db, userId):
+    try:
+        collection = db['user_token']
+
+        # Define a document to be inserted
+        query = {"user_id": userId}
+        projection = {"user_id", "token", "refresh_token"}   # You can specify fields to include or exclude in the result
+        result = collection.find_one(query, projection)
+        if result:
+            print(f'found code for user: {result.get("user_id")}')
+            return result
+        else:
+            print(f'No token found for user: {userId}, persisting token')
+    except Exception as e:
+        print(f'Failed to fetch token for user: {userId}')
+        print(e)
+def persist_token(db, userId, token, refresh_token):
+    try:
+        collection = db['user_token']
+
+        # Define a document to be inserted
+        query = {"user_id": userId}
+        projection = {"user_id", "token", "refresh_token"}  # You can specify fields to include or exclude in the result
+        result = collection.find_one(query, projection)
+        if result:
+            print(f'found code for user: {result.get("user_id")}')
+        else:
+            print(f'No token found for user: {userId}, persisting token')
+            document = {
+                'user_id': userId,
+                'token': token,
+                'refresh_token': refresh_token
+            }
+            insert_result = collection.insert_one(document)
+    except Exception as e:
+        print(f'Failed to fetch token for user: {userId}')
         print(e)
 
 if __name__ == '__main__':
