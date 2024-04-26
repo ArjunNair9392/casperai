@@ -11,6 +11,8 @@ tesseract-ocr \
 tesseract-ocr-eng \
 ffmpeg \
 libsm6 \
+libpq-dev \
+gcc \
 libxext6 \
 && rm -rf /var/lib/apt/lists/*
 
