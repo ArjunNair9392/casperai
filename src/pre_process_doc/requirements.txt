@@ -122,7 +122,7 @@ portalocker==2.8.2
 posthog==3.3.4
 prompthub-py==4.0.0
 protobuf==4.25.2
-#psycopg2==2.9.9
+psycopg2==2.9.9
 pulsar-client==3.4.0
 pyasn1==0.5.1
 pyasn1-modules==0.3.0
