@@ -7,96 +7,101 @@ from retriever import create_multi_vector_retriever
 import camelot
 import os
 
-def extract_pdf_elements(file_path, file_name):
+# Extract elements from PDF
+def extract_pdf_elements(fpath, fname):
     """
-    Extracts elements such as images, tables, and chunked text from a PDF file.
+    Extract images, tables, and chunk text from a PDF file.
+    path: File path, which is used to dump images (.jpg)
+    fname: File name
     """
-    partitions = partition_pdf(
-        filename=os.path.join(file_path, file_name),
+    return partition_pdf(
+        filename=fpath + fname,
         extract_images_in_pdf=True,
         infer_table_structure=True,
         chunking_strategy="by_title",
         max_characters=4000,
         new_after_n_chars=3800,
-        include_metadata=True,
         combine_text_under_n_chars=2000,
-        image_output_dir_path=file_path,
+        image_output_dir_path=fpath,
     )
 
-    return partitions
-
-def extract_text(raw_pdf_elements):
+# Categorize elements by type
+def extract_texts(raw_pdf_elements):
     """
-    Categorizes extracted elements from a PDF into texts.
+    Categorize extracted elements from a PDF into tables and texts.
+    raw_pdf_elements: List of unstructured.documents.elements
     """
-    texts_with_page_numbers = []
+    texts = []
     for element in raw_pdf_elements:
         if "unstructured.documents.elements.CompositeElement" in str(type(element)):
-            text = str(element)
-            page_number = element.metadata.page_number
-            texts_with_page_numbers.append((text, page_number))
-    return texts_with_page_numbers
+            texts.append(str(element))
+    return texts
 
-def extract_tables(file_path, file_name):
-    """
-    Extracts tables from the PDF using Camelot.
-    """
-    tables = camelot.read_pdf(os.path.join(file_path, file_name), flavor='stream', pages='all')
-    tables_with_page_numbers = [(table.df, table.page) for table in tables]
-    return tables_with_page_numbers
+def extract_tables(fpath, fname):
+    # Use camelot to read tables from the PDF
+    tables = camelot.read_pdf(fpath+fname, flavor='stream', pages='all')
+    dataframes = [table.df for table in tables]
 
-def extract_images(image_path):
-    """
-    Extracts images from a directory.
-    """
+    return dataframes
+
+
+def extract_images(img_path):
+    
     images = []
-    if os.path.exists(image_path):
-        for filename in os.listdir(image_path):
+    # iterate over files in directory
+    if os.path.exists(img_path):
+        for filename in os.listdir(img_path):
             if filename.endswith(".jpg"):
-                img = Image.open(os.path.join(image_path, filename))
+                img = Image.open(os.path.join(img_path, filename))
                 images.append(img)
+
     return images
 
-def chunk_text(texts_with_page_numbers):
-    """
-    Chunks texts into smaller segments.
-    """
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(chunk_size=4000, chunk_overlap=0)
-    chunks_with_page_numbers = [(chunk, page_number) for text, page_number in texts_with_page_numbers
-                                for chunk in text_splitter.split_text(text)]
-    return chunks_with_page_numbers
+def chunkning_texts(texts):
+    # Optional: Enforce a specific token size for texts
+    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
+        chunk_size=4000, chunk_overlap=0
+    )
+    joined_texts = " ".join(texts)
+    texts_4k_token = text_splitter.split_text(joined_texts)
 
-def convert_tables_to_json(tables_with_page_numbers):
-    """
-    Converts tables to JSON format.
-    """
-    json_tables = [(df.to_json(orient='records'), page_number) for df, page_number in tables_with_page_numbers]
+    return texts_4k_token
+
+def convert_tables_to_json(tables):
+    json_tables = [df.to_json(orient='records') for df in tables]
     return json_tables
 
-def process_pdf(file_path, file_name, index_name):
-    """
-    Extracts and summarizes elements from a PDF file.
-    """
-    img_dir_path = "figures/"
-    raw_pdf_elements = extract_pdf_elements(file_path, file_name)
-    texts_with_page_numbers = extract_text(raw_pdf_elements)
-    tables_with_page_numbers = extract_tables(file_path, file_name)
-    images = extract_images(img_dir_path)
-    chunked_texts = chunk_text(texts_with_page_numbers)
+def extract_summarize_pdf(fpath, fname, indexName):
+    # File path
+    img_path = "figures/"
+    # Get elements
+    raw_pdf_elements = extract_pdf_elements(fpath, fname)
+    # Get text, tables
+    texts = extract_texts(raw_pdf_elements)
+    tables = extract_tables(fpath, fname)
+    images = extract_images(img_path)
+    texts_4k_token = chunkning_texts(texts)
 
+    # Get text, table summaries
     text_summaries, table_summaries = generate_text_and_table_summaries(
-        chunked_texts, tables_with_page_numbers, summarize_texts=True
+        texts_4k_token, tables, summarize_texts=True
     )
 
-    img_base64_list, image_summaries = generate_img_summaries(img_dir_path)
-    json_tables = convert_tables_to_json(tables_with_page_numbers)
+    # Image summaries
+    img_base64_list, image_summaries = generate_img_summaries(img_path)
+    json_tables = convert_tables_to_json(tables)
 
-    retriever_multi_vector = create_multi_vector_retriever(
+    # Create retriever
+    retriever_multi_vector_img = create_multi_vector_retriever(
         text_summaries,
-        texts_with_page_numbers,
+        texts,
         table_summaries,
         json_tables,
         image_summaries,
         img_base64_list,
-        index_name
+        indexName
     )
+
+# if __name__ == "__main__":
+#     main()
+
