@@ -3,56 +3,67 @@ from langchain_core.documents import Document
 from langchain.storage import InMemoryStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Pinecone as lc_pinecone
-from pinecone import PodSpec, Pinecone
+from pinecone import PodSpec, Pinecone, ServerlessSpec
 from langchain_community.storage import SQLDocStore
 
 import uuid
 import os
 
-def get_pinecone_index(index_name):
-    """
-    Get or create the Pinecone vector index.
-    """
-    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+
+def get_vectorestore(indexName):
+    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
+    index_name = indexName
     indexes = pc.list_indexes().names()
-    
+    print("Indexes: ")
+    print(indexes)
     if index_name in indexes:
-        print(f"Pinecone index '{index_name}' found")
-        return pc.Index(index_name)
+        print("Pinecode index found")
+        index = pc.Index(index_name)
     else:
-        print(f"Pinecone index '{index_name}' not found, creating one")
+        # Create the index in case it doesn't exist
+        print("Pinecode index not found, creating one")
         pc.create_index(
             name=index_name,
             dimension=1536,
             metric="euclidean",
-            spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
         )
-        return pc.Index(index_name)
+        index = pc.Index(index_name)
 
-def create_multi_vector_retriever(
-    text_summaries, texts, table_summaries, tables, image_summaries, images, index_name
-):
-    """
-    Create a multi-vector retriever that indexes summaries and returns raw text, tables, or images.
-    """
-    vector_index = get_pinecone_index(index_name)
-
-    # Initialize OpenAI embeddings
-    # model_name = 'text-embedding-3-small'
     model_name = 'text-embedding-ada-002'
-    embed = OpenAIEmbeddings(model=model_name, openai_api_key=os.getenv("OPENAI_API_KEY"))
-    print(f"Initializing OpenAI embeddings with model: {model_name}")
+
+    embed = OpenAIEmbeddings(
+        model=model_name,
+        openai_api_key=os.getenv("OPENAI_API_KEY")
+    )
 
     # Instantiate Pinecone vectorstore
-    vectorstore = lc_pinecone(vector_index, embed.embed_query, "text")
+    vectorstore = lc_pinecone(index, embed.embed_query, "text")
 
-    # Connect to PostgreSQL database
-    connection_string = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
-    docstore_collection_name = index_name
-    docstore = SQLDocStore(collection_name=docstore_collection_name, connection_string=connection_string)
+    return vectorstore
+
+def create_multi_vector_retriever(
+    text_summaries, texts, table_summaries, tables, image_summaries, images, indexName
+):
+    """
+    Create retriever that indexes summaries, but returns raw images or texts
+    """
+    # Pinecode vectorstore
+    vectorstore = get_vectorestore(indexName)
+
+    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
+    COLLECTION_NAME = indexName
+
+    docstore = SQLDocStore(
+        collection_name=COLLECTION_NAME,
+        connection_string=CONNECTION_STRING,
+    )
     print("Connection to PostgreSQL DB successful")
-
     id_key = "doc_id"
+    #store = InMemoryStore()
 
     # Create the multi-vector retriever
     retriever = MultiVectorRetriever(
@@ -61,29 +72,25 @@ def create_multi_vector_retriever(
         id_key=id_key,
     )
 
-    def add_documents(retriever, doc_summaries, doc_contents_with_page_numbers, add_page_number):
-        """
-        Add documents to the retriever's vectorstore and docstore.
-        """
-        doc_ids = [str(uuid.uuid4()) for _ in doc_contents_with_page_numbers]
-        if add_page_number:
-            page_numbers = [page_tuple[1] if len(page_tuple) >= 2 else page_tuple[0] for page_tuple in doc_contents_with_page_numbers]
-        else:
-            page_numbers = [-1]
-
+    # Helper function to add documents to the vectorstore and docstore
+    def add_documents(retriever, doc_summaries, doc_contents):
+        doc_ids = [str(uuid.uuid4()) for _ in doc_contents]
         summary_docs = [
-            Document(page_content=summary, metadata={"id_key": doc_id, "page_number": page_number})
-            for doc_id, summary, page_number in zip(doc_ids, doc_summaries, page_numbers)
+            Document(page_content=s, metadata={id_key: doc_ids[i]})
+            for i, s in enumerate(doc_summaries)
         ]
         retriever.vectorstore.add_documents(summary_docs)
-        retriever.docstore.mset(list(zip(doc_ids, doc_contents_with_page_numbers)))
+        retriever.docstore.mset(list(zip(doc_ids, doc_contents)))
 
-    # Add texts, tables, and images if they are not empty
+    # Add texts, tables, and images
+    # Check that text_summaries is not empty before adding
     if text_summaries:
-        add_documents(retriever, text_summaries, texts, True)
+        add_documents(retriever, text_summaries, texts)
+    # Check that table_summaries is not empty before adding
     if table_summaries:
-        add_documents(retriever, table_summaries, tables, True)
+        add_documents(retriever, table_summaries, tables)
+    # Check that image_summaries is not empty before adding
     if image_summaries:
-        add_documents(retriever, image_summaries, images, False)
+        add_documents(retriever, image_summaries, images)
 
     return retriever

@@ -95,8 +95,8 @@ def get_google_drive_credentials(user_id, code):
             token=token,
             refresh_token=refresh_token,
             token_uri="https://www.googleapis.com/oauth2/v3/token",
-            client_id="771148068297-ke9e4o4c7gjhduggsi2cu1tgtmgelav2.apps.googleusercontent.com",  #os.getenv("GOOGLE_CLIENT_ID"),
-            client_secret="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" #os.getenv("GOOGLE_CLIENT_SECRET"),
+            client_id=os.getenv("GOOGLE_CLIENT_ID"),
+            client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
         )
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
@@ -165,10 +165,10 @@ def get_token(code):
         url = "https://oauth2.googleapis.com/token"
         params = {
             "code": code,
-            "client_id": "771148068297-ke9e4o4c7gjhduggsi2cu1tgtmgelav2.apps.googleusercontent.com",
-            "client_secret": "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",
+            "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
             "grant_type": "authorization_code",
-            "redirect_uri": "http://localhost:8080/test"
+            "redirect_uri": "http://localhost:8080/usable/folders"
         }
         response = requests.post(url, params=params)
         # Check if the request was successful (status code 200)
@@ -221,3 +221,6 @@ def persist_token(db, userId, token, refresh_token):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
+
+
+    

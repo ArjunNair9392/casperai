@@ -11,6 +11,8 @@ from langchain_openai import OpenAIEmbeddings
 from langchain.retrievers.multi_vector import MultiVectorRetriever
 from pinecone import PodSpec, Pinecone
 from langchain_community.storage import SQLDocStore
+from typing import List
+from langchain_core.retrievers import BaseRetriever, Document
 
 import io
 import re
@@ -20,6 +22,7 @@ from pymongo import MongoClient
 import os
 
 app = Flask(__name__)
+
 def looks_like_base64(sb):
     if not isinstance(sb, str):
         return False
@@ -137,7 +140,7 @@ def multi_modal_rag_chain(retriever):
     Multi-modal RAG chain
     """
     # Multi-modal LLM
-    model = ChatOpenAI(temperature=0, model="gpt-4-vision-preview", max_tokens=1024, openai_api_key=os.getenv("OPENAI_API_KEY"))
+    model = ChatOpenAI(temperature=0, model="gpt-4-vision-preview", openai_api_key=os.getenv("OPENAI_API_KEY"))
 
     # RAG pipeline
     chain = (
@@ -198,7 +201,7 @@ def get_vectorestore(indexName):
     )
 
     # Instantiate Pinecone vectorstore
-    vectorstore = lc_pinecone(index, embed.embed_query, "text")
+    vectorstore = lc_pinecone(index, embed, "text")
 
     return vectorstore
 def getRetriever(indexName):
@@ -236,12 +239,14 @@ def chat():
         query.pop()  # Remove the last item from the list
     else:
         question = None
-
     history = query
-    history_aware_retriever = lambda query: (retriever.get_relevant_documents(question), history)
+    # Combine the current question with the history to provide context
+    full_query = f"{question} {history}"
+    history_aware_retriever = lambda query: (retriever.get_relevant_documents(full_query, limit=3), history)
     chain_multimodal_rag = multi_modal_rag_chain(history_aware_retriever)
     response = chain_multimodal_rag.invoke({
-        'question' : question
+        "question" : question,
+        "history": history
     })
     return jsonify(response)
 
