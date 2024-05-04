@@ -49,7 +49,13 @@ def process_files():
         persist_document_metadata(db, file_info, company_id, True)
         print(f"Metadata for file '{file_info['name']}' persisted successfully")
 
-    return 'Files downloaded and saved from the folder', 200
+    data = {
+        'message': 'Files downloaded and saved from the folder'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+
+    return response, 200
 
 # Function to list files from Google Drive
 @app.route('/listFiles', methods=['GET'])
@@ -61,7 +67,10 @@ def list_files():
     service = build('drive', 'v3', credentials=creds)
     files = get_files_from_drive(service)
     print("Files retrieved successfully from Google Drive")
-    return jsonify(files)
+    response = jsonify(files)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+
+    return response
 
 # Function to fetch files from Google Drive
 def get_files_from_drive(service):
