@@ -240,7 +240,9 @@ def chat():
     else:
         question = None
     history = query
-    history_aware_retriever = lambda query: (retriever.get_relevant_documents(question, limit=6), history)
+    # Combine the current question with the history to provide context
+    full_query = f"{question} {history}"
+    history_aware_retriever = lambda query: (retriever.get_relevant_documents(full_query, limit=3), history)
     chain_multimodal_rag = multi_modal_rag_chain(history_aware_retriever)
     response = chain_multimodal_rag.invoke({
         "question" : question,

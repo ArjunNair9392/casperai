@@ -3,7 +3,7 @@ from langchain_core.documents import Document
 from langchain.storage import InMemoryStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Pinecone as lc_pinecone
-from pinecone import PodSpec, Pinecone
+from pinecone import PodSpec, Pinecone, ServerlessSpec
 from langchain_community.storage import SQLDocStore
 
 import uuid
@@ -26,7 +26,10 @@ def get_vectorestore(indexName):
             name=index_name,
             dimension=1536,
             metric="euclidean",
-            spec=PodSpec(environment=os.getenv("PINECONE_API_ENV"))
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
         )
         index = pc.Index(index_name)
 

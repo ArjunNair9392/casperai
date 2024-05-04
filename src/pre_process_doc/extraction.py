@@ -71,7 +71,7 @@ def convert_tables_to_json(tables):
     json_tables = [df.to_json(orient='records') for df in tables]
     return json_tables
 
-def extract_summarize_pdf(fpath, fname, indexName):
+def process_pdf(fpath, fname, indexName):
     # File path
     img_path = "figures/"
     # Get elements
