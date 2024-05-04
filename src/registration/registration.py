@@ -20,12 +20,14 @@ def register_company():
     persist_company_info(db, name, address, city, state, phone_number, admin_email)
     add_users(db, [admin_email], name)
 
-    response = {
+    data = {
         'status': 'success',
         'message': 'Company registered successfully'
     }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
 
-    return jsonify(response),200
+    return response,200
 @app.route('/getAdminInfo', methods=['GET'])
 def get_company():
     admin_email = request.args.get('adminEmail')
@@ -34,8 +36,13 @@ def get_company():
     if result:
         name = result.get("name")
         admin_email = result.get("admin_email")
-        return jsonify({"company" : name,
-                        "admin_email" : admin_email})
+        data = {
+            "company": name,
+            "admin_email": admin_email
+        }
+        response = jsonify(data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
     else:
         abort(404)
 
@@ -48,11 +55,12 @@ def add_users_to_company():
 
     db = connect_to_mongodb()
     add_users(db, userIds, company)
-    response = {
+    data = {
         'status': 'success',
     }
-
-    return jsonify(response), 200
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 def add_users(db, userIds, company):
     try:
