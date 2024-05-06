@@ -4,6 +4,7 @@ import os
 
 from datetime import datetime
 from extraction import process_pdf
+from flask_cors import CORS
 from flask import request, Flask, jsonify
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -23,6 +24,7 @@ UPLOAD_FOLDER = './uploads/'
 # Initialize Flask app
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+CORS(app)
 
 # Ensure upload folder exists
 if not os.path.exists(UPLOAD_FOLDER):
