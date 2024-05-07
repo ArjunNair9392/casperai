@@ -46,16 +46,16 @@ def get_vectorestore(indexName):
     return vectorstore
 
 def create_multi_vector_retriever(
-    text_summaries, texts, table_summaries, tables, image_summaries, images, indexName
+    text_summaries, texts, table_summaries, tables, image_summaries, images, index_name, file_id
 ):
     """
     Create retriever that indexes summaries, but returns raw images or texts
     """
     # Pinecode vectorstore
-    vectorstore = get_vectorestore(indexName)
+    vectorstore = get_vectorestore(index_name)
 
     CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
-    COLLECTION_NAME = indexName
+    COLLECTION_NAME = index_name
 
     docstore = SQLDocStore(
         collection_name=COLLECTION_NAME,
@@ -63,7 +63,6 @@ def create_multi_vector_retriever(
     )
     print("Connection to PostgreSQL DB successful")
     id_key = "doc_id"
-    #store = InMemoryStore()
 
     # Create the multi-vector retriever
     retriever = MultiVectorRetriever(
@@ -76,7 +75,7 @@ def create_multi_vector_retriever(
     def add_documents(retriever, doc_summaries, doc_contents):
         doc_ids = [str(uuid.uuid4()) for _ in doc_contents]
         summary_docs = [
-            Document(page_content=s, metadata={id_key: doc_ids[i]})
+            Document(page_content=s, metadata={id_key: doc_ids[i], "file_id": file_id})
             for i, s in enumerate(doc_summaries)
         ]
         retriever.vectorstore.add_documents(summary_docs)

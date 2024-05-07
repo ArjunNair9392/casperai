@@ -46,7 +46,7 @@ def process_files():
         print(f"Processing file: {file_info['name']}")
         download_and_save_file(service, file_info)
         print(f"File '{file_info['name']}' downloaded and saved successfully")
-        process_pdf(app.config['UPLOAD_FOLDER'], file_info['name'], company_id)
+        process_pdf(app.config['UPLOAD_FOLDER'], file_info['name'], company_id, file_id)
         print(f"File '{file_info['name']}' processed successfully")
         persist_document_metadata(db, file_info, company_id, True)
         print(f"Metadata for file '{file_info['name']}' persisted successfully")

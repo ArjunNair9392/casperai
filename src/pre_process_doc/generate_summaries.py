@@ -33,7 +33,6 @@ def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     # Initialize empty summaries
     text_summaries = []
     table_summaries = []
-    print(len(texts))
 
     # Apply to text if texts are provided and summarization is requested
     if texts and summarize_texts:
