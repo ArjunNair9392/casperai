@@ -9,7 +9,6 @@ from langchain_community.storage import SQLDocStore
 import uuid
 import os
 
-
 def get_vectorestore(indexName):
     pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
     index_name = indexName
@@ -33,7 +32,7 @@ def get_vectorestore(indexName):
         )
         index = pc.Index(index_name)
 
-    model_name = 'text-embedding-ada-002'
+    model_name = 'text-embedding-3-small'
 
     embed = OpenAIEmbeddings(
         model=model_name,

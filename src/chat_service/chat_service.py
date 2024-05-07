@@ -28,7 +28,6 @@ def looks_like_base64(sb):
         return False
     return re.match("^[A-Za-z0-9+/]+[=]{0,2}$", sb) is not None
 
-
 def is_image_data(b64data):
     """
     Check if the base64 data is an image by looking at the start of the data
@@ -48,7 +47,6 @@ def is_image_data(b64data):
     except Exception:
         return False
 
-
 def resize_base64_image(base64_string, size=(128, 128)):
     """
     Resize an image encoded as a Base64 string
@@ -66,7 +64,6 @@ def resize_base64_image(base64_string, size=(128, 128)):
 
     # Encode the resized image to Base64
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
-
 
 def split_image_text_types(docs):
     """
@@ -87,7 +84,6 @@ def split_image_text_types(docs):
       else:
           texts.append(doc)
     return {"images": b64_images, "texts": texts, "tables": table_df}
-
 
 def img_prompt_func(data_dict):
     """
@@ -155,7 +151,6 @@ def multi_modal_rag_chain(retriever):
 
     return chain
 
-
 def fetchIndexName(user_id):
     MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
     try:
@@ -193,7 +188,8 @@ def get_vectorestore(indexName):
 
     #OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-    model_name = 'text-embedding-ada-002'
+    # model_name = 'text-embedding-ada-002'
+    model_name = 'text-embedding-3-small'
 
     embed = OpenAIEmbeddings(
         model=model_name,
@@ -204,6 +200,7 @@ def get_vectorestore(indexName):
     vectorstore = lc_pinecone(index, embed, "text")
 
     return vectorstore
+
 def getRetriever(indexName):
     vectorstore = get_vectorestore(indexName)
 
@@ -225,6 +222,7 @@ def getRetriever(indexName):
     )
 
     return retriever
+
 @app.route('/chat', methods=['POST'])
 def chat():
     data = flask.request.get_json()

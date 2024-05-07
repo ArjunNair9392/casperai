@@ -44,7 +44,6 @@ def extract_tables(fpath, fname):
 
     return dataframes
 
-
 def extract_images(img_path):
     
     images = []
@@ -102,7 +101,3 @@ def process_pdf(fpath, fname, index_name, file_id):
         index_name,
         file_id
     )
-
-# if __name__ == "__main__":
-#     main()
-

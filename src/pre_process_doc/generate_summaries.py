@@ -51,7 +51,6 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
-
 def image_summarize(img_base64, prompt):
     """Make image summary"""
     chat = ChatOpenAI(model="gpt-4-vision-preview", openai_api_key=os.getenv("OPENAI_API_KEY"))

@@ -14,7 +14,6 @@ from google.auth.transport.requests import Request
 from pymongo import MongoClient
 import requests
 
-
 # Define Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
@@ -33,13 +32,13 @@ if not os.path.exists(UPLOAD_FOLDER):
 # Function to handle processing files from Google Drive
 @app.route('/processFiles', methods=['POST'])
 def process_files():
+    db = connect_to_mongodb()
     data = flask.request.get_json()
     file_ids = data.get('fileIds', [])
-    company_id = data.get('companyId')
     user_id = data.get('userId')
+    company_id = get_company_id(db, user_id)
     creds = get_google_drive_credentials(user_id, "")
     service = build('drive', 'v3', credentials=creds)
-    db = connect_to_mongodb()
 
     for file_id in file_ids:
         file_info = get_file_info(service, file_id)
@@ -56,7 +55,6 @@ def process_files():
     }
     response = jsonify(data)
     response.headers.add('Access-Control-Allow-Origin', '*')
-
     return response, 200
 
 # Function to list files from Google Drive
@@ -154,6 +152,18 @@ def download_and_save_file(service, file_info):
         with open(path, 'wb') as f:
             f.write(fh.getbuffer())
 
+def get_company_id(db, user_id):
+    try:
+        collection = db['users']
+        user = collection.find_one({"userId": user_id})
+        if user:
+            return user.get("companyId")
+        else:
+            return None
+    except Exception as e:
+        print(f'Failed to get company id for user: {user_id}')
+        print(e)
+
 # Function to persist document metadata into MongoDB
 def persist_document_metadata(db, file_info, company_id, processed=False):
     try:
@@ -208,6 +218,7 @@ def fetch_token(db, userId):
     except Exception as e:
         print(f'Failed to fetch token for user: {userId}')
         print(e)
+
 def persist_token(db, userId, token, refresh_token):
     try:
         collection = db['user_token']
@@ -225,7 +236,7 @@ def persist_token(db, userId, token, refresh_token):
                 'token': token,
                 'refresh_token': refresh_token
             }
-            insert_result = collection.insert_one(document)
+            collection.insert_one(document)
     except Exception as e:
         print(f'Failed to fetch token for user: {userId}')
         print(e)
