@@ -230,6 +230,7 @@ def chat():
     query = data.get('query')
     indexName = fetchIndexName(userId)
     retriever = getRetriever(indexName)
+    vectorstore = get_vectorestore(indexName)
     last_item = query[-1]
     # Extract and remove the last element with role="user" as question
     if last_item['role'] == 'user':
@@ -240,6 +241,13 @@ def chat():
     history = query
     # Combine the current question with the history to provide context
     full_query = f"{question} {history}"
+    # Directly call the vectorstore and get all relevant documents. similarity_search
+    # called internally by get_relevant_documents.
+    relevant_documents = vectorstore.similarity_search(full_query, k=3)
+    # Get file_id for each document
+    # TODO: Will be used to cite source.
+    for doc in relevant_documents:
+        file_id = doc.metadata['file_id']
     history_aware_retriever = lambda query: (retriever.get_relevant_documents(full_query, limit=3), history)
     chain_multimodal_rag = multi_modal_rag_chain(history_aware_retriever)
     response = chain_multimodal_rag.invoke({

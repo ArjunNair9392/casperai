@@ -71,7 +71,7 @@ def create_multi_vector_retriever(
     )
 
     # Helper function to add documents to the vectorstore and docstore
-    def add_documents(retriever, doc_summaries, doc_contents):
+    def add_documents(retriever, doc_summaries, doc_contents, file_id):
         doc_ids = [str(uuid.uuid4()) for _ in doc_contents]
         summary_docs = [
             Document(page_content=s, metadata={id_key: doc_ids[i], "file_id": file_id})
@@ -83,12 +83,12 @@ def create_multi_vector_retriever(
     # Add texts, tables, and images
     # Check that text_summaries is not empty before adding
     if text_summaries:
-        add_documents(retriever, text_summaries, texts)
+        add_documents(retriever, text_summaries, texts, file_id)
     # Check that table_summaries is not empty before adding
     if table_summaries:
-        add_documents(retriever, table_summaries, tables)
+        add_documents(retriever, table_summaries, tables, file_id)
     # Check that image_summaries is not empty before adding
     if image_summaries:
-        add_documents(retriever, image_summaries, images)
+        add_documents(retriever, image_summaries, images, file_id)
 
     return retriever
