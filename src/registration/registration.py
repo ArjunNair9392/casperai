@@ -30,6 +30,7 @@ def register_company():
     response.headers.add('Access-Control-Allow-Origin', '*')
 
     return response,200
+
 @app.route('/getAdminInfo', methods=['GET'])
 def get_company():
     admin_email = request.args.get('adminEmail')
@@ -68,15 +69,19 @@ def add_users(db, userIds, company):
     try:
         collection = db['users']
         for userId in userIds:
-            document = {
-                'userId': userId,
-                'companyId': company
-            }
-            insert_result = collection.insert_one(document)
-            print(f'Inserted user : {userId}')
+            if collection.find_one({'userId': userId}) is None:
+                document = {
+                    'userId': userId,
+                    'companyId': company
+                }
+                insert_result = collection.insert_one(document)
+                print(f'Inserted user : {userId}')
+            else:
+                print(f'User already exists: {userId}')
     except Exception as e:
         print(f'Failed to insert user : {userId}')
         print(e)
+
 def get_company_for_admin(db, admin_email):
     try:
         collection = db['companies']
@@ -110,6 +115,7 @@ def persist_company_info(db, name, address, city, state, phone_number, admin_ema
     except Exception as e:
         print(f'Failed to insert company info for : {name}')
         print(e)
+
 def connect_to_mongodb():
     try:
         MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
