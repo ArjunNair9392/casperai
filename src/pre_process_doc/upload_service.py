@@ -75,7 +75,7 @@ def list_files():
 # Function to fetch files from Google Drive
 def get_files_from_drive(service):
     try:
-        results = service.files().list(pageSize=10, fields="nextPageToken, files(id, name, webViewLink)").execute()
+        results = service.files().list(fields="nextPageToken, files(id, name, webViewLink)", q="mimeType='application/pdf'").execute()
         items = results.get('files', [])
         return items
     except Exception as e:
