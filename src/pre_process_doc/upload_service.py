@@ -1,7 +1,7 @@
 import flask
 import io
 import os
-
+import subprocess
 from datetime import datetime
 from extraction import process_pdf
 from flask_cors import CORS
@@ -59,9 +59,9 @@ def process_files():
     for file_id in file_ids:
         file_info = get_file_info(service, file_id)
         print(f"Processing file: {file_info['name']}")
-        download_and_save_file(service, file_info)
+        file_name = download_and_save_file(service, file_info)
         print(f"File '{file_info['name']}' downloaded and saved successfully")
-        process_pdf(app.config['UPLOAD_FOLDER'], file_info['name'], company_id, file_id)
+       # process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
         print(f"File '{file_info['name']}' processed successfully")
         persist_document_metadata(db, file_info, company_id, True)
         print(f"Metadata for file '{file_info['name']}' persisted successfully")
@@ -138,13 +138,29 @@ def refresh_credentials(token_file):
         token.write(creds.to_json())
     return creds
 
+# Function to connect to MongoDB
+def connect_to_mongodb():
+    try:
+        MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+        client = MongoClient(MONGODB_URI)
+        db = client['Casperai']
+        print("Connected successfully to MongoDB")
+        return db
+    except Exception as e:
+        print("Failed to connect to MongoDB")
+        print(e)
+
 # Function to fetch file information from Google Drive
 def get_file_info(service, file_id):
     return service.files().get(fileId=file_id, fields='id, name, parents, webViewLink, mimeType').execute()
 
 # Function to download and save file from Google Drive
 def download_and_save_file(service, file_info):
-    if file_info['mimeType'] == 'application/pdf':
+    if file_info['mimeType'] in ['application/pdf',
+                                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                 'application/msword',
+                                 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                                 'application/vnd.ms-powerpoint']:  # Add MIME types for PPT and Word
         request = service.files().get_media(fileId=file_info['id'])
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
@@ -152,9 +168,35 @@ def download_and_save_file(service, file_info):
         while done is False:
             status, done = downloader.next_chunk()
 
-        path = os.path.join(app.config['UPLOAD_FOLDER'], file_info['name'])
-        with open(path, 'wb') as f:
+        # Save the Word document to a temporary file
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_info['name'])
+        with open(file_path, 'wb') as f:
             f.write(fh.getbuffer())
+
+        # Convert the Word document to PDF
+        pdf_output_path = os.path.splitext(file_path)[0] + '.pdf'
+        if file_info['mimeType'] in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                     'application/msword',
+                                     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                                     'application/vnd.ms-powerpoint']:
+            subprocess.run(['unoconv', '-f', 'pdf', file_path])
+
+        # Remove the temporary Word file
+        os.remove(file_path)
+        pdf_name = os.path.basename(pdf_output_path)
+        return pdf_name
+
+def get_company_id(db, user_id):
+    try:
+        collection = db['users']
+        user = collection.find_one({"userId": user_id})
+        if user:
+            return user.get("companyId")
+        else:
+            return None
+    except Exception as e:
+        print(f'Failed to get company id for user: {user_id}')
+        print(e)
 
 # Function to persist document metadata into MongoDB
 def persist_document_metadata(db, file_info, company_id, processed=False):

@@ -1,4 +1,4 @@
-FROM python:3.9-slim-buster
+FROM python:3.9
 
 WORKDIR /app
 
@@ -14,16 +14,22 @@ libsm6 \
 libpq-dev \
 gcc \
 libxext6 \
+unoconv \
+libreoffice \
 && rm -rf /var/lib/apt/lists/*
+
+# Set PYTHONPATH environment variable
+ENV PYTHONPATH="/usr/lib/libreoffice/program"
 
 COPY ./requirements.txt ./requirements.txt
 COPY extraction.py ./extraction.py
 COPY retriever.py ./retriever.py
 COPY generate_summaries.py ./generate_summaries.py
 COPY upload_service.py ./uploadApp.py
-COPY token ./token
 RUN pip install -r requirements.txt
 
 EXPOSE 8080
 
-CMD ["python", "uploadApp.py"]
+RUN sed -i 's|#!/usr/bin/env python3|#!/usr/bin/python3|' /usr/bin/unoconv
+
+CMD ["python3", "uploadApp.py"]
