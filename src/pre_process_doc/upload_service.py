@@ -12,6 +12,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from pymongo import MongoClient
+from utility_functions import delete_file, connect_to_mongodb, get_company_id
 import requests
 
 # Define Google Drive API scopes
@@ -28,6 +29,21 @@ CORS(app)
 # Ensure upload folder exists
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+
+# Function to delete the file data from vector DB and postgres database
+@app.route('/deleteFile', methods=['POST'])
+def delete_file_service():
+    data = flask.request.get_json()
+    file_id = data.get('fileId')
+    user_id = data.get('userId')
+    print(f"File id is being deleted '{file_id}'")
+    delete_file(user_id, file_id)
+    data = {
+        'message': 'File successfully deleted'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 # Function to handle processing files from Google Drive
 @app.route('/processFiles', methods=['POST'])
@@ -122,18 +138,6 @@ def refresh_credentials(token_file):
         token.write(creds.to_json())
     return creds
 
-# Function to connect to MongoDB
-def connect_to_mongodb():
-    try:
-        MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
-        client = MongoClient(MONGODB_URI)
-        db = client['Casperai']
-        print("Connected successfully to MongoDB")
-        return db
-    except Exception as e:
-        print("Failed to connect to MongoDB")
-        print(e)
-
 # Function to fetch file information from Google Drive
 def get_file_info(service, file_id):
     return service.files().get(fileId=file_id, fields='id, name, parents, webViewLink, mimeType').execute()
@@ -151,18 +155,6 @@ def download_and_save_file(service, file_info):
         path = os.path.join(app.config['UPLOAD_FOLDER'], file_info['name'])
         with open(path, 'wb') as f:
             f.write(fh.getbuffer())
-
-def get_company_id(db, user_id):
-    try:
-        collection = db['users']
-        user = collection.find_one({"userId": user_id})
-        if user:
-            return user.get("companyId")
-        else:
-            return None
-    except Exception as e:
-        print(f'Failed to get company id for user: {user_id}')
-        print(e)
 
 # Function to persist document metadata into MongoDB
 def persist_document_metadata(db, file_info, company_id, processed=False):
