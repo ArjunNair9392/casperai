@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from extraction import process_pdf
 from flask_cors import CORS
-from flask import request, Flask, jsonify
+from flask import request, Flask, jsonify, make_response
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -60,8 +60,8 @@ def process_files():
         file_info = get_file_info(service, file_id)
         print(f"Processing file: {file_info['name']}")
         file_name = download_and_save_file(service, file_info)
-        print(f"File '{file_info['name']}' downloaded and saved successfully")
-       # process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
+        print(f"File '{file_name}' downloaded and saved successfully")
+        process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
         print(f"File '{file_info['name']}' processed successfully")
         persist_document_metadata(db, file_info, company_id, True)
         print(f"Metadata for file '{file_info['name']}' persisted successfully")
@@ -88,10 +88,47 @@ def list_files():
 
     return response
 
+@app.route('/getFilesForUser', methods=['GET'])
+def get_file_status():
+    try:
+        user_id = request.args.get('userId')
+        db = connect_to_mongodb()
+        company_id = get_company_id(db, user_id)
+        print(f"Fetching file statuses for user: '{user_id}' and company: '{company_id}'")
+        data = get_documents_by_company(db, company_id)
+        jsonData = jsonify(data)
+        response = make_response(jsonData)
+        response.headers.add('Content-Type', 'application/json')
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+    except Exception as e:
+        # Handle any exceptions that occur in the overall process
+        print(f"An error occurred in the file processing operation: {str(e)}")
+        # Optionally, you can log the error or take other appropriate actions
+        data = {
+            'error': 'An error occurred during file processing'
+        }
+        response = jsonify(data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+
+def get_documents_by_company(db, company_id):
+    try:
+        collection = db['documents']
+        document_filter = {'companyId': company_id}
+        projection = {'docId': 1, 'docName': 1, 'processed': 1, '_id': 0}  # Include only docName and processed fields
+        documents = collection.find(document_filter, projection)
+        document_list = list(documents)
+        return document_list  # Convert document list to JSON
+    except Exception as e:
+        print(f'Failed to retrieve documents for company_id: {company_id}')
+        print(e)
+        return '[]'  # Return empty JSON array in case of error
 # Function to fetch files from Google Drive
 def get_files_from_drive(service):
     try:
-        results = service.files().list(fields="nextPageToken, files(id, name, webViewLink)", q="mimeType='application/pdf'").execute()
+        q = "mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/msword' or mimeType='application/vnd.openxmlformats-officedocument.presentationml.presentation' or mimeType='application/vnd.ms-powerpoint'"
+        results = service.files().list(fields="nextPageToken, files(id, name, webViewLink)", q=q).execute()
         items = results.get('files', [])
         return items
     except Exception as e:
