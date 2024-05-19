@@ -1,21 +1,23 @@
-from datetime import datetime
-from extraction import process_pdf
-from flask_cors import CORS
-from flask import request, Flask, jsonify, make_response, url_for, render_template
-from flask_mail import Mail, Message
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from pymongo import MongoClient
-from utility_functions import delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, confirm_token, get_shared_users
-import requests
-import flask
 import io
 import os
 import subprocess
+from datetime import datetime
 
+import flask
+import requests
+from flask import request, Flask, jsonify, make_response, url_for, render_template
+from flask_cors import CORS
+from flask_mail import Mail, Message
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+from pymongo import MongoClient
+
+from extraction import process_pdf
+from utility_functions import delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
+    confirm_token, get_shared_users
 
 # Define Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
@@ -32,7 +34,7 @@ app.config['MAIL_SERVER'] = os.getenv("MAIL_SERVER")
 app.config['MAIL_PORT'] = os.getenv("MAIL_PORT")
 app.config['MAIL_USE_TLS'] = os.getenv("MAIL_USE_TLS")
 app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME")
-app.config['MAIL_PASSWORD'] =  os.getenv("MAIL_PASSWORD")
+app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD")
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv("MAIL_DEFAULT_SENDER")
 
 mail = Mail(app)
@@ -51,6 +53,7 @@ def send_email(to, subject, template):
     )
     mail.send(msg)
 
+
 @app.route('/emailConfirmation', methods=['POST'])
 def trigger_email_confirmation():
     data = flask.request.get_json()
@@ -67,6 +70,7 @@ def trigger_email_confirmation():
     response = jsonify(data)
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response, 200
+
 
 @app.route('/emailNotification', methods=['POST'])
 def send_notification():
@@ -98,16 +102,17 @@ def send_notification():
 
 @app.route('/comfirmEmail/<token>')
 def confirm_email(token):
-        email = confirm_token(token)
-        db = connect_to_mongodb()
-        collection = db['users']
-        user = collection.find_one({"userId": email})
-        if user:
-            collection.update_one({"userId": email}, {"$set": {"isVerified": True}})
-            return render_template('confirmed.html')
-        else:
-            print('User not found or unable to update MongoDB.', 'danger')
-            return render_template('expired.html')
+    email = confirm_token(token)
+    db = connect_to_mongodb()
+    collection = db['users']
+    user = collection.find_one({"userId": email})
+    if user:
+        collection.update_one({"userId": email}, {"$set": {"isVerified": True}})
+        return render_template('confirmed.html')
+    else:
+        print('User not found or unable to update MongoDB.', 'danger')
+        return render_template('expired.html')
+
 
 # Function to delete the file data from vector DB and postgres database
 @app.route('/deleteFile', methods=['POST'])
@@ -123,6 +128,7 @@ def delete_file_service():
     response = jsonify(data)
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response, 200
+
 
 # Function to handle processing files from Google Drive
 @app.route('/processFiles', methods=['POST'])
@@ -152,6 +158,7 @@ def process_files():
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response, 200
 
+
 # Function to list files from Google Drive
 @app.route('/listFiles', methods=['GET'])
 def list_files():
@@ -166,6 +173,7 @@ def list_files():
     response.headers.add('Access-Control-Allow-Origin', '*')
 
     return response
+
 
 @app.route('/getFilesForUser', methods=['GET'])
 def get_file_status():
@@ -191,6 +199,7 @@ def get_file_status():
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
 
+
 def get_documents_by_company(db, company_id):
     try:
         collection = db['documents']
@@ -204,6 +213,7 @@ def get_documents_by_company(db, company_id):
         print(e)
         return '[]'  # Return empty JSON array in case of error
 
+
 # Function to get users for a particular company
 @app.route('/getSharedUsers', methods=['GET'])
 def get_users():
@@ -213,6 +223,7 @@ def get_users():
     response.headers.add('Access-Control-Allow-Origin', '*')
 
     return response
+
 
 # Function to fetch files from Google Drive
 def get_files_from_drive(service):
@@ -225,6 +236,7 @@ def get_files_from_drive(service):
         print("Failed to fetch files from Google Drive")
         print(e)
         return []
+
 
 # Function to fetch Google Drive credentials
 def get_google_drive_credentials(user_id, code):
@@ -244,18 +256,19 @@ def get_google_drive_credentials(user_id, code):
         persist_token(db, user_id, token, refresh_token)
 
     creds = Credentials(
-            token=token,
-            refresh_token=refresh_token,
-            token_uri="https://www.googleapis.com/oauth2/v3/token",
-            client_id=os.getenv("GOOGLE_CLIENT_ID"),
-            client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-        )
+        token=token,
+        refresh_token=refresh_token,
+        token_uri="https://www.googleapis.com/oauth2/v3/token",
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    )
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
 
     return creds
+
 
 # Function to refresh Google Drive credentials
 def refresh_credentials(token_file):
@@ -265,10 +278,11 @@ def refresh_credentials(token_file):
         token.write(creds.to_json())
     return creds
 
+
 # Function to connect to MongoDB
 def connect_to_mongodb():
     try:
-        MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+        MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
         client = MongoClient(MONGODB_URI)
         db = client['Casperai']
         print("Connected successfully to MongoDB")
@@ -277,9 +291,11 @@ def connect_to_mongodb():
         print("Failed to connect to MongoDB")
         print(e)
 
+
 # Function to fetch file information from Google Drive
 def get_file_info(service, file_id):
     return service.files().get(fileId=file_id, fields='id, name, parents, webViewLink, mimeType').execute()
+
 
 # Function to download and save file from Google Drive
 def download_and_save_file(service, file_info):
@@ -313,6 +329,7 @@ def download_and_save_file(service, file_info):
         pdf_name = os.path.basename(pdf_output_path)
         return pdf_name
 
+
 def get_company_id(db, user_id):
     try:
         collection = db['users']
@@ -324,6 +341,7 @@ def get_company_id(db, user_id):
     except Exception as e:
         print(f'Failed to get company id for user: {user_id}')
         print(e)
+
 
 # Function to persist document metadata into MongoDB
 def persist_document_metadata(db, file_info, company_id, processed=False):
@@ -342,6 +360,7 @@ def persist_document_metadata(db, file_info, company_id, processed=False):
         print(f'Failed to insert document: {file_info["id"]} to documents collection')
         print(e)
 
+
 def get_token(code):
     try:
         url = "https://oauth2.googleapis.com/token"
@@ -356,12 +375,13 @@ def get_token(code):
         # Check if the request was successful (status code 200)
         if response.status_code == 200:
             print("POST request successful!")
-            data =response.json()
+            data = response.json()
             return data
         else:
             print("POST request failed with status code:", response.status_code)
     except Exception as e:
         print("An error occurred:", str(e))
+
 
 def fetch_token(db, userId):
     try:
@@ -369,7 +389,7 @@ def fetch_token(db, userId):
 
         # Define a document to be inserted
         query = {"user_id": userId}
-        projection = {"user_id", "token", "refresh_token"}   # You can specify fields to include or exclude in the result
+        projection = {"user_id", "token", "refresh_token"}  # You can specify fields to include or exclude in the result
         result = collection.find_one(query, projection)
         if result:
             print(f'found code for user: {result.get("user_id")}')
@@ -379,6 +399,7 @@ def fetch_token(db, userId):
     except Exception as e:
         print(f'Failed to fetch token for user: {userId}')
         print(e)
+
 
 def persist_token(db, userId, token, refresh_token):
     try:
@@ -402,8 +423,6 @@ def persist_token(db, userId, token, refresh_token):
         print(f'Failed to fetch token for user: {userId}')
         print(e)
 
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
-
-    

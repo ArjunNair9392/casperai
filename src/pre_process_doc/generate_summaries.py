@@ -1,15 +1,16 @@
+import base64
+import os
+import shutil
+
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
-from dotenv import load_dotenv
-
-import time
-import os
-import base64
-import shutil
 
 load_dotenv()
+
+
 # Generate summaries of text elements
 def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     """
@@ -43,13 +44,14 @@ def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     if tables:
         table_summaries = summarize_chain.batch(tables, {"max_concurrency": 1})
 
-
     return text_summaries, table_summaries
+
 
 def encode_image(image_path):
     """Getting the base64 string"""
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode("utf-8")
+
 
 def image_summarize(img_base64, prompt):
     """Make image summary"""
@@ -70,6 +72,7 @@ def image_summarize(img_base64, prompt):
     )
     return msg.content
 
+
 def delete_folder_relative(folder_name):
     folder_path = os.path.join(os.path.dirname(__file__), folder_name)
 
@@ -82,8 +85,8 @@ def delete_folder_relative(folder_name):
     else:
         print(f"Folder does not exist: {folder_path}")
 
-def generate_img_summaries(path):
 
+def generate_img_summaries(path):
     """
     Generate summaries and base64 encoded strings for images
     path: Path to list of .jpg files extracted by Unstructured

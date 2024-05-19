@@ -1,14 +1,15 @@
+import os
+
+import psycopg2
+from itsdangerous import URLSafeTimedSerializer
 from pinecone import Pinecone
 from pymongo import MongoClient
-from itsdangerous import URLSafeTimedSerializer
-import psycopg2
 
-import os
 
 # Function to connect to MongoDB
 def connect_to_mongodb():
     try:
-        MONGODB_URI =  "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+        MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
         client = MongoClient(MONGODB_URI)
         db = client['Casperai']
         print("Connected successfully to MongoDB")
@@ -16,6 +17,7 @@ def connect_to_mongodb():
     except Exception as e:
         print("Failed to connect to MongoDB")
         print(e)
+
 
 def get_company_id(db, user_id):
     try:
@@ -29,18 +31,21 @@ def get_company_id(db, user_id):
         print(f'Failed to get company id for user: {user_id}')
         print(e)
 
+
 def query_records_by_metadata(index, metadata_key, metadata_value, namespace=''):
     query_result = index.query(
-        vector=[0]*1536,   # A dummy vector since we only need metadata filtering
+        vector=[0] * 1536,  # A dummy vector since we only need metadata filtering
         filter={metadata_key: {'$eq': metadata_value}},
-        top_k=10000,      # Adjust as necessary, maximum is 10000
+        top_k=10000,  # Adjust as necessary, maximum is 10000
         namespace=namespace,
         include_metadata=True
     )
     return query_result['matches']
 
+
 def delete_records_from_vectordb(index, ids, namespace=''):
     index.delete(ids=ids, namespace=namespace)
+
 
 def delete_records_from_postgres(CONNECTION_STRING, custom_ids):
     db_params = {
@@ -75,10 +80,11 @@ def delete_records_from_postgres(CONNECTION_STRING, custom_ids):
     except (Exception, psycopg2.Error) as error:
         print("Error while deleting records from PostgreSQL:", error)
 
+
 def delete_file(user_id, file_id):
     db = connect_to_mongodb()
     company_id = get_company_id(db, user_id)
-    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index = pc.Index(company_id)
     records = query_records_by_metadata(index, 'file_id', file_id)
     # Extract IDs from the query result
@@ -89,9 +95,11 @@ def delete_file(user_id, file_id):
     # Delete the records
     delete_records_from_vectordb(index, record_ids)
 
+
 def generate_confirmation_token(email):
     serializer = URLSafeTimedSerializer(os.getenv("MAIL_SECRET_KEY"))
     return serializer.dumps(email, salt=os.getenv('MAIL_SECURITY_PASSWORD_SALT'))
+
 
 def confirm_token(token, expiration=3600):
     serializer = URLSafeTimedSerializer(os.getenv("MAIL_SECRET_KEY"))
@@ -104,6 +112,7 @@ def confirm_token(token, expiration=3600):
     except:
         return False
     return email
+
 
 def get_shared_users(user_id):
     db = connect_to_mongodb()

@@ -1,16 +1,16 @@
-from langchain.retrievers.multi_vector import MultiVectorRetriever
-from langchain_core.documents import Document
-from langchain.storage import InMemoryStore
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Pinecone as lc_pinecone
-from pinecone import PodSpec, Pinecone, ServerlessSpec
-from langchain_community.storage import SQLDocStore
-
-import uuid
 import os
+import uuid
+
+from langchain.retrievers.multi_vector import MultiVectorRetriever
+from langchain_community.storage import SQLDocStore
+from langchain_community.vectorstores import Pinecone as lc_pinecone
+from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+from pinecone import Pinecone, ServerlessSpec
+
 
 def get_vectorestore(indexName):
-    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index_name = indexName
     indexes = pc.list_indexes().names()
     print("Indexes: ")
@@ -44,8 +44,9 @@ def get_vectorestore(indexName):
 
     return vectorstore
 
+
 def create_multi_vector_retriever(
-    text_summaries, texts, table_summaries, tables, image_summaries, images, index_name, file_id
+        text_summaries, texts, table_summaries, tables, image_summaries, images, index_name, file_id
 ):
     """
     Create retriever that indexes summaries, but returns raw images or texts

@@ -1,11 +1,13 @@
-from unstructured.partition.pdf import partition_pdf
-from langchain.text_splitter import CharacterTextSplitter
+import os
+
+import camelot
 from PIL import Image
+from langchain.text_splitter import CharacterTextSplitter
+from unstructured.partition.pdf import partition_pdf
+
 from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
 from retriever import create_multi_vector_retriever
 
-import camelot
-import os
 
 # Extract elements from PDF
 def extract_pdf_elements(fpath, fname):
@@ -25,6 +27,7 @@ def extract_pdf_elements(fpath, fname):
         image_output_dir_path=fpath,
     )
 
+
 # Categorize elements by type
 def extract_texts(raw_pdf_elements):
     """
@@ -37,15 +40,16 @@ def extract_texts(raw_pdf_elements):
             texts.append(str(element))
     return texts
 
+
 def extract_tables(fpath, fname):
     # Use camelot to read tables from the PDF
-    tables = camelot.read_pdf(fpath+fname, flavor='stream', pages='all')
+    tables = camelot.read_pdf(fpath + fname, flavor='stream', pages='all')
     dataframes = [table.df for table in tables]
 
     return dataframes
 
+
 def extract_images(img_path):
-    
     images = []
     # iterate over files in directory
     if os.path.exists(img_path):
@@ -55,6 +59,7 @@ def extract_images(img_path):
                 images.append(img)
 
     return images
+
 
 def chunkning_texts(texts):
     # Optional: Enforce a specific token size for texts
@@ -66,9 +71,11 @@ def chunkning_texts(texts):
 
     return texts_4k_token
 
+
 def convert_tables_to_json(tables):
     json_tables = [df.to_json(orient='records') for df in tables]
     return json_tables
+
 
 def process_pdf(fpath, fname, index_name, file_id):
     # File path
