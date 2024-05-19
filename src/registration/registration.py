@@ -72,7 +72,8 @@ def add_users(db, userIds, company):
             if collection.find_one({'userId': userId}) is None:
                 document = {
                     'userId': userId,
-                    'companyId': company
+                    'companyId': company,
+                    'isVerified': False # type: ignore
                 }
                 insert_result = collection.insert_one(document)
                 print(f'Inserted user : {userId}')

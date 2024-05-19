@@ -9,6 +9,7 @@ attrs==23.2.0
 backoff==2.2.1
 bcrypt==4.1.2
 beautifulsoup4==4.12.3
+blinker==1.8.2
 boilerpy3==1.0.7
 build==1.0.3
 cachetools==5.3.2
@@ -42,6 +43,7 @@ filelock==3.13.1
 filetype==1.2.0
 Flask==2.0.3
 Flask-Cors==4.0.0
+Flask-Mail==0.9.1
 flatbuffers==23.5.26
 fonttools==4.47.2
 frozenlist==1.4.1

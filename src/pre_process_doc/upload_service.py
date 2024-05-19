@@ -1,11 +1,7 @@
-import flask
-import io
-import os
-import subprocess
 from datetime import datetime
 from extraction import process_pdf
 from flask_cors import CORS
-from flask import request, Flask, jsonify, make_response
+from flask import request, Flask, jsonify, make_response, url_for, render_template
 from flask_mail import Mail, Message
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -13,8 +9,13 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from pymongo import MongoClient
-from utility_functions import delete_file, connect_to_mongodb, get_company_id
+from utility_functions import delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, confirm_token, get_shared_users
 import requests
+import flask
+import io
+import os
+import subprocess
+
 
 # Define Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
@@ -27,9 +28,86 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 CORS(app)
 
+app.config['MAIL_SERVER'] = os.getenv("MAIL_SERVER")
+app.config['MAIL_PORT'] = os.getenv("MAIL_PORT")
+app.config['MAIL_USE_TLS'] = os.getenv("MAIL_USE_TLS")
+app.config['MAIL_USERNAME'] = os.getenv("MAIL_USERNAME")
+app.config['MAIL_PASSWORD'] =  os.getenv("MAIL_PASSWORD")
+app.config['MAIL_DEFAULT_SENDER'] = os.getenv("MAIL_DEFAULT_SENDER")
+
+mail = Mail(app)
+
 # Ensure upload folder exists
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
+
+
+def send_email(to, subject, template):
+    msg = Message(
+        subject,
+        recipients=[to],
+        html=template,
+        sender=os.getenv('MAIL_DEFAULT_SENDER')
+    )
+    mail.send(msg)
+
+@app.route('/emailConfirmation', methods=['POST'])
+def trigger_email_confirmation():
+    data = flask.request.get_json()
+    user_id = data.get('userId')
+    token = generate_confirmation_token(user_id)
+    confirm_url = url_for('confirm_email', token=token, _external=True)
+    html = render_template('activate.html', confirm_url=confirm_url)
+
+    subject = "Please confirm your email"
+    send_email(user_id, subject, html)
+    data = {
+        'message': f'Confirmation email has been send to {user_id}.'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
+
+@app.route('/emailNotification', methods=['POST'])
+def send_notification():
+    data = flask.request.get_json()
+    user_id = data.get('userId')
+    chat_link = "/"
+    user_ids = get_shared_users(user_id)
+
+    if not user_ids or not chat_link:
+        return jsonify({'message': 'Invalid request data'}), 400
+
+    for user_id in user_ids:
+        # Generate the email content
+        html = render_template('notification.html', chat_link=chat_link)
+
+        # Subject of the email
+        subject = "Your file has been processed"
+
+        # Send the email
+        send_email(user_id, subject, html)
+
+    response_data = {
+        'message': f'Notification emails have been sent to {len(user_ids)} users.'
+    }
+    response = jsonify(response_data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
+
+
+@app.route('/comfirmEmail/<token>')
+def confirm_email(token):
+        email = confirm_token(token)
+        db = connect_to_mongodb()
+        collection = db['users']
+        user = collection.find_one({"userId": email})
+        if user:
+            collection.update_one({"userId": email}, {"$set": {"isVerified": True}})
+            return render_template('confirmed.html')
+        else:
+            print('User not found or unable to update MongoDB.', 'danger')
+            return render_template('expired.html')
 
 # Function to delete the file data from vector DB and postgres database
 @app.route('/deleteFile', methods=['POST'])
@@ -125,16 +203,12 @@ def get_documents_by_company(db, company_id):
         print(f'Failed to retrieve documents for company_id: {company_id}')
         print(e)
         return '[]'  # Return empty JSON array in case of error
+
 # Function to get users for a particular company
 @app.route('/getSharedUsers', methods=['GET'])
-def get_shared_users():
+def get_users():
     user_id = request.args.get('userId')
-    db = connect_to_mongodb()
-    company_id = get_company_id(db, user_id)
-    collection = db['users']
-    users = collection.find({"companyId": company_id})
-    # Extract user IDs from the query result
-    user_ids = [user['userId'] for user in users]
+    user_ids = get_shared_users(user_id)
     response = jsonify({"userIds": user_ids})
     response.headers.add('Access-Control-Allow-Origin', '*')
 

@@ -1,5 +1,6 @@
 from pinecone import Pinecone
 from pymongo import MongoClient
+from itsdangerous import URLSafeTimedSerializer
 import psycopg2
 
 import os
@@ -87,3 +88,28 @@ def delete_file(user_id, file_id):
     delete_records_from_postgres(CONNECTION_STRING, doc_ids)
     # Delete the records
     delete_records_from_vectordb(index, record_ids)
+
+def generate_confirmation_token(email):
+    serializer = URLSafeTimedSerializer(os.getenv("MAIL_SECRET_KEY"))
+    return serializer.dumps(email, salt=os.getenv('MAIL_SECURITY_PASSWORD_SALT'))
+
+def confirm_token(token, expiration=3600):
+    serializer = URLSafeTimedSerializer(os.getenv("MAIL_SECRET_KEY"))
+    try:
+        email = serializer.loads(
+            token,
+            salt=os.getenv('MAIL_SECURITY_PASSWORD_SALT'),
+            max_age=expiration
+        )
+    except:
+        return False
+    return email
+
+def get_shared_users(user_id):
+    db = connect_to_mongodb()
+    company_id = get_company_id(db, user_id)
+    collection = db['users']
+    users = collection.find({"companyId": company_id})
+    # Extract user IDs from the query result
+    user_ids = [user['userId'] for user in users]
+    return user_ids

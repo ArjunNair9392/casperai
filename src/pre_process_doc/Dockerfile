@@ -26,6 +26,7 @@ COPY extraction.py ./extraction.py
 COPY retriever.py ./retriever.py
 COPY generate_summaries.py ./generate_summaries.py
 COPY upload_service.py ./uploadApp.py
+COPY utility_functions.py ./utility_functions.py
 RUN pip install -r requirements.txt
 
 EXPOSE 8080
