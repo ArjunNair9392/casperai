@@ -6,6 +6,7 @@ from datetime import datetime
 from extraction import process_pdf
 from flask_cors import CORS
 from flask import request, Flask, jsonify, make_response
+from flask_mail import Mail, Message
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -124,6 +125,21 @@ def get_documents_by_company(db, company_id):
         print(f'Failed to retrieve documents for company_id: {company_id}')
         print(e)
         return '[]'  # Return empty JSON array in case of error
+# Function to get users for a particular company
+@app.route('/getSharedUsers', methods=['GET'])
+def get_shared_users():
+    user_id = request.args.get('userId')
+    db = connect_to_mongodb()
+    company_id = get_company_id(db, user_id)
+    collection = db['users']
+    users = collection.find({"companyId": company_id})
+    # Extract user IDs from the query result
+    user_ids = [user['userId'] for user in users]
+    response = jsonify({"userIds": user_ids})
+    response.headers.add('Access-Control-Allow-Origin', '*')
+
+    return response
+
 # Function to fetch files from Google Drive
 def get_files_from_drive(service):
     try:
