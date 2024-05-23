@@ -9,7 +9,7 @@ from pymongo import MongoClient
 # Function to connect to MongoDB
 def connect_to_mongodb():
     try:
-        MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+        MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
         client = MongoClient(MONGODB_URI)
         db = client['Casperai']
         print("Connected successfully to MongoDB")
