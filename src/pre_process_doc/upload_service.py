@@ -323,9 +323,8 @@ def download_and_save_file(service, file_info):
                                      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
                                      'application/vnd.ms-powerpoint']:
             subprocess.run(['unoconv', '-f', 'pdf', file_path])
-
-        # Remove the temporary Word file
-        os.remove(file_path)
+            # Remove the temporary Word file
+            os.remove(file_path)
         pdf_name = os.path.basename(pdf_output_path)
         return pdf_name
 
