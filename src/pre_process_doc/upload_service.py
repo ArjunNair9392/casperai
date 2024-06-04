@@ -2,6 +2,7 @@ import io
 import os
 import subprocess
 from datetime import datetime
+from enum import Enum
 
 import flask
 import requests
@@ -16,7 +17,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from pymongo import MongoClient
 
 from extraction import process_pdf
-from utility_functions import delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
+from utility_functions import delete_user, delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
     confirm_token, get_shared_users
 
 # Define Google Drive API scopes
@@ -38,6 +39,13 @@ app.config['MAIL_PASSWORD'] = os.getenv("MAIL_PASSWORD")
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv("MAIL_DEFAULT_SENDER")
 
 mail = Mail(app)
+
+
+class DocumentStatus(Enum):
+    IN_PROCESS = "IN_PROCESS"
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+
 
 # Ensure upload folder exists
 if not os.path.exists(UPLOAD_FOLDER):
@@ -72,10 +80,7 @@ def trigger_email_confirmation():
     return response, 200
 
 
-@app.route('/emailNotification', methods=['POST'])
-def send_notification():
-    data = flask.request.get_json()
-    user_id = data.get('userId')
+def send_notification(user_id):
     chat_link = "/"
     user_ids = get_shared_users(user_id)
 
@@ -130,6 +135,20 @@ def delete_file_service():
     return response, 200
 
 
+@app.route('/deleteUser', methods=['POST'])
+def delete_user_service():
+    data = flask.request.get_json()
+    user_id = data.get('userId')
+    print(f"User id is being deleted '{user_id}'")
+    delete_user(user_id)
+    data = {
+        'message': 'User successfully deleted'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
+
+
 # Function to handle processing files from Google Drive
 @app.route('/processFiles', methods=['POST'])
 def process_files():
@@ -146,10 +165,19 @@ def process_files():
         print(f"Processing file: {file_info['name']}")
         file_name = download_and_save_file(service, file_info)
         print(f"File '{file_name}' downloaded and saved successfully")
-        process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
-        print(f"File '{file_info['name']}' processed successfully")
-        persist_document_metadata(db, file_info, company_id, True)
-        print(f"Metadata for file '{file_info['name']}' persisted successfully")
+        # Persist metadata with IN_PROCESS status
+        persist_document_metadata(db, file_info, company_id, DocumentStatus.IN_PROCESS)
+        try:
+            process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
+            print(f"File '{file_info['name']}' processed successfully")
+            persist_document_metadata(db, file_info, company_id, DocumentStatus.SUCCESS)
+            print(f"Metadata for file '{file_info['name']}' persisted successfully")
+            send_notification(user_id)
+        except Exception as e:
+            print(f"Error processing file: {file_info['name']}")
+            print(e)
+            # Update status to FAILURE on error
+            persist_document_metadata(db, file_info, company_id, DocumentStatus.FAILURE)
 
     data = {
         'message': 'Files downloaded and saved from the folder'
@@ -204,7 +232,8 @@ def get_documents_by_company(db, company_id):
     try:
         collection = db['documents']
         document_filter = {'companyId': company_id}
-        projection = {'docId': 1, 'docName': 1, 'processed': 1, '_id': 0}  # Include only docName and processed fields
+        projection = {'docId': 1, 'docName': 1, 'status': 1, '_id': 0,
+                      'docUrl': 1}
         documents = collection.find(document_filter, projection)
         document_list = list(documents)
         return document_list  # Convert document list to JSON
@@ -343,20 +372,30 @@ def get_company_id(db, user_id):
 
 
 # Function to persist document metadata into MongoDB
-def persist_document_metadata(db, file_info, company_id, processed=False):
+def persist_document_metadata(db, file_info, company_id, status):
     try:
         collection = db['documents']
-        document = {
-            'docId': file_info['id'],
-            'docName': file_info['name'],
-            'docUrl': file_info['webViewLink'],
-            'companyId': company_id,
-            'timestamp': datetime.now(),
-            'processed': processed
-        }
-        collection.insert_one(document)
+        # Check if document already exists
+        existing_document = collection.find_one({'docId': file_info['id']})
+
+        if existing_document:
+            # Update status of existing document
+            collection.update_one({'_id': existing_document['_id']}, {'$set': {'status': status.value}})
+            print(f"Updated status of document: {file_info['id']} to {status.value}")
+        else:
+            # Insert new document if it doesn't exist
+            document = {
+                'docId': file_info['id'],
+                'docName': file_info['name'],
+                'docUrl': file_info['webViewLink'],
+                'companyId': company_id,
+                'timestamp': datetime.now(),
+                'status': status.value
+            }
+            collection.insert_one(document)
+            print(f"Inserted document: {file_info['id']} with status {status.value}")
     except Exception as e:
-        print(f'Failed to insert document: {file_info["id"]} to documents collection')
+        print(f'Failed to persist document: {file_info["id"]}')
         print(e)
 
 
