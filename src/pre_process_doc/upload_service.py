@@ -162,6 +162,13 @@ def process_files():
 
     for file_id in file_ids:
         file_info = get_file_info(service, file_id)
+        collection = db['documents']
+        # Check if document already exists
+        existing_document = collection.find_one({'docId': file_info['id']})
+        if existing_document:
+            status = existing_document['status']
+            if status == "SUCCESS":
+                continue
         print(f"Processing file: {file_info['name']}")
         file_name = download_and_save_file(service, file_info)
         print(f"File '{file_name}' downloaded and saved successfully")
