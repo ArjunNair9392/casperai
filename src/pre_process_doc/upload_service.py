@@ -86,9 +86,6 @@ def send_notification(user_id):
     chat_link = "/"
     user_ids = get_shared_users(user_id)
 
-    if not user_ids or not chat_link:
-        return jsonify({'message': 'Invalid request data'}), 400
-
     for user_id in user_ids:
         # Generate the email content
         html = render_template('notification.html', chat_link=chat_link)
@@ -98,13 +95,6 @@ def send_notification(user_id):
 
         # Send the email
         send_email(user_id, subject, html)
-
-    response_data = {
-        'message': f'Notification emails have been sent to {len(user_ids)} users.'
-    }
-    response = jsonify(response_data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response, 200
 
 
 @app.route('/comfirmEmail/<token>')
