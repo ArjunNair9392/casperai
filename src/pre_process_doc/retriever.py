@@ -7,20 +7,21 @@ from langchain_community.vectorstores import Pinecone as lc_pinecone
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 from pinecone import Pinecone, ServerlessSpec
+from logging_config import logger
 
 
 def get_vectorestore(indexName):
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index_name = indexName
     indexes = pc.list_indexes().names()
-    print("Indexes: ")
-    print(indexes)
+    logger.info("Indexes: ")
+    logger.info(indexes)
     if index_name in indexes:
-        print("Pinecode index found")
+        logger.info("Pinecode index found")
         index = pc.Index(index_name)
     else:
         # Create the index in case it doesn't exist
-        print("Pinecode index not found, creating one")
+        logger.info("Pinecode index not found, creating one")
         pc.create_index(
             name=index_name,
             dimension=1536,
@@ -61,7 +62,7 @@ def create_multi_vector_retriever(
         collection_name=COLLECTION_NAME,
         connection_string=CONNECTION_STRING,
     )
-    print("Connection to PostgreSQL DB successful")
+    logger.info("Connection to PostgreSQL DB successful")
     id_key = "doc_id"
 
     # Create the multi-vector retriever

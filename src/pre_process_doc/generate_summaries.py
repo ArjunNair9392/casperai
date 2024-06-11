@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from logging_config import logger
 
 load_dotenv()
 
@@ -27,7 +28,7 @@ def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     about the table or text, we should be able to derive the answer from the table or text summary. \
     Table or text: {element} """
     prompt = ChatPromptTemplate.from_template(prompt_text)
-
+    logger.info(f"Generating summaries")
     # Text summary chain
     model = ChatOpenAI(temperature=0, model="gpt-4", openai_api_key=os.getenv("OPENAI_API_KEY"))
     summarize_chain = {"element": lambda x: x} | prompt | model | StrOutputParser()
@@ -44,6 +45,7 @@ def generate_text_and_table_summaries(texts, tables, summarize_texts=False):
     if tables:
         table_summaries = summarize_chain.batch(tables, {"max_concurrency": 1})
 
+    logger.info(f"Generating summaries complete")
     return text_summaries, table_summaries
 
 
@@ -54,6 +56,7 @@ def encode_image(image_path):
 
 
 def image_summarize(img_base64, prompt):
+    logger.info(f"Generating image summaries")
     """Make image summary"""
     chat = ChatOpenAI(model="gpt-4o", openai_api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -87,6 +90,7 @@ def delete_folder_relative(folder_name):
 
 
 def generate_img_summaries(path):
+    logger.info(f"Generating image summaries")
     """
     Generate summaries and base64 encoded strings for images
     path: Path to list of .jpg files extracted by Unstructured
@@ -116,4 +120,5 @@ def generate_img_summaries(path):
             image_summaries.append(image_summarize(base64_image, prompt))
 
     delete_folder_relative(folder_to_delete)
+    logger.info(f"Generating image summaries complete")
     return img_base64_list, image_summaries

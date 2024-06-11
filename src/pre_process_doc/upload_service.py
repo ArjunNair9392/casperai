@@ -15,10 +15,12 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from pymongo import MongoClient
+import logging
 
 from extraction import process_pdf
 from utility_functions import delete_user, delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
     confirm_token, get_shared_users
+from logging_config import logger
 
 # Define Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
@@ -115,7 +117,7 @@ def confirm_email(token):
         collection.update_one({"userId": email}, {"$set": {"isVerified": True}})
         return render_template('confirmed.html')
     else:
-        print('User not found or unable to update MongoDB.', 'danger')
+        logger.info('User not found or unable to update MongoDB.', 'danger')
         return render_template('expired.html')
 
 
@@ -125,7 +127,7 @@ def delete_file_service():
     data = flask.request.get_json()
     file_id = data.get('fileId')
     user_id = data.get('userId')
-    print(f"File id is being deleted '{file_id}'")
+    logger.info(f"File id is being deleted '{file_id}'")
     delete_file(user_id, file_id)
     data = {
         'message': 'File successfully deleted'
@@ -139,7 +141,7 @@ def delete_file_service():
 def delete_user_service():
     data = flask.request.get_json()
     user_id = data.get('userId')
-    print(f"User id is being deleted '{user_id}'")
+    logger.info(f"User id is being deleted '{user_id}'")
     delete_user(user_id)
     data = {
         'message': 'User successfully deleted'
@@ -169,20 +171,20 @@ def process_files():
             status = existing_document['status']
             if status == "SUCCESS":
                 continue
-        print(f"Processing file: {file_info['name']}")
+        logger.info(f"Processing file: {file_info['name']}")
         file_name = download_and_save_file(service, file_info)
-        print(f"File '{file_name}' downloaded and saved successfully")
+        logger.info(f"File '{file_name}' downloaded and saved successfully")
         # Persist metadata with IN_PROCESS status
         persist_document_metadata(db, file_info, company_id, DocumentStatus.IN_PROCESS)
         try:
             process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
-            print(f"File '{file_info['name']}' processed successfully")
+            logger.info(f"File '{file_info['name']}' processed successfully")
             persist_document_metadata(db, file_info, company_id, DocumentStatus.SUCCESS)
-            print(f"Metadata for file '{file_info['name']}' persisted successfully")
+            logger.info(f"Metadata for file '{file_info['name']}' persisted successfully")
             send_notification(user_id)
         except Exception as e:
-            print(f"Error processing file: {file_info['name']}")
-            print(e)
+            logger.info(f"Error processing file: {file_info['name']}")
+            logger.info(f"Error: {e}")
             # Update status to FAILURE on error
             persist_document_metadata(db, file_info, company_id, DocumentStatus.FAILURE)
 
@@ -199,11 +201,11 @@ def process_files():
 def list_files():
     user_id = request.args.get('userId')
     code = request.args.get('code')
-    print(f"User id we are pulling the file for for file is '{user_id}'")
+    logger.info(f"User id we are pulling the file for for file is '{user_id}'")
     creds = get_google_drive_credentials(user_id, code)
     service = build('drive', 'v3', credentials=creds)
     files = get_files_from_drive(service)
-    print("Files retrieved successfully from Google Drive")
+    logger.info("Files retrieved successfully from Google Drive")
     response = jsonify(files)
     response.headers.add('Access-Control-Allow-Origin', '*')
 
@@ -216,7 +218,7 @@ def get_file_status():
         user_id = request.args.get('userId')
         db = connect_to_mongodb()
         company_id = get_company_id(db, user_id)
-        print(f"Fetching file statuses for user: '{user_id}' and company: '{company_id}'")
+        logger.info(f"Fetching file statuses for user: '{user_id}' and company: '{company_id}'")
         data = get_documents_by_company(db, company_id)
         jsonData = jsonify(data)
         response = make_response(jsonData)
@@ -225,7 +227,7 @@ def get_file_status():
         return response
     except Exception as e:
         # Handle any exceptions that occur in the overall process
-        print(f"An error occurred in the file processing operation: {str(e)}")
+        logger.info(f"An error occurred in the file processing operation: {str(e)}")
         # Optionally, you can log the error or take other appropriate actions
         data = {
             'error': 'An error occurred during file processing'
@@ -245,8 +247,8 @@ def get_documents_by_company(db, company_id):
         document_list = list(documents)
         return document_list  # Convert document list to JSON
     except Exception as e:
-        print(f'Failed to retrieve documents for company_id: {company_id}')
-        print(e)
+        logger.info(f'Failed to retrieve documents for company_id: {company_id}')
+        logger.info(e)
         return '[]'  # Return empty JSON array in case of error
 
 
@@ -269,8 +271,8 @@ def get_files_from_drive(service):
         items = results.get('files', [])
         return items
     except Exception as e:
-        print("Failed to fetch files from Google Drive")
-        print(e)
+        logger.info("Failed to fetch files from Google Drive")
+        logger.info(e)
         return []
 
 
@@ -280,12 +282,12 @@ def get_google_drive_credentials(user_id, code):
 
     result = fetch_token(db, user_id)
     if result:
-        print("found token in DB")
+        logger.info("found token in DB")
         token = result["token"]
         refresh_token = result["refresh_token"]
 
     else:
-        print("fetching token from google api")
+        logger.info("fetching token from google api")
         token_result = get_token(code)
         token = token_result.get("access_token")
         refresh_token = token_result.get("refresh_token")
@@ -321,11 +323,11 @@ def connect_to_mongodb():
         MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
         client = MongoClient(MONGODB_URI)
         db = client['Casperai']
-        print("Connected successfully to MongoDB")
+        logger.info("Connected successfully to MongoDB")
         return db
     except Exception as e:
-        print("Failed to connect to MongoDB")
-        print(e)
+        logger.info("Failed to connect to MongoDB")
+        logger.info(e)
 
 
 # Function to fetch file information from Google Drive
@@ -374,8 +376,8 @@ def get_company_id(db, user_id):
         else:
             return None
     except Exception as e:
-        print(f'Failed to get company id for user: {user_id}')
-        print(e)
+        logger.info(f'Failed to get company id for user: {user_id}')
+        logger.info(e)
 
 
 # Function to persist document metadata into MongoDB
@@ -388,7 +390,7 @@ def persist_document_metadata(db, file_info, company_id, status):
         if existing_document:
             # Update status of existing document
             collection.update_one({'_id': existing_document['_id']}, {'$set': {'status': status.value}})
-            print(f"Updated status of document: {file_info['id']} to {status.value}")
+            logger.info(f"Updated status of document: {file_info['id']} to {status.value}")
         else:
             # Insert new document if it doesn't exist
             document = {
@@ -400,10 +402,10 @@ def persist_document_metadata(db, file_info, company_id, status):
                 'status': status.value
             }
             collection.insert_one(document)
-            print(f"Inserted document: {file_info['id']} with status {status.value}")
+            logger.info(f"Inserted document: {file_info['id']} with status {status.value}")
     except Exception as e:
-        print(f'Failed to persist document: {file_info["id"]}')
-        print(e)
+        logger.info(f'Failed to persist document: {file_info["id"]}')
+        logger.info(e)
 
 
 def get_token(code):
@@ -419,13 +421,13 @@ def get_token(code):
         response = requests.post(url, params=params)
         # Check if the request was successful (status code 200)
         if response.status_code == 200:
-            print("POST request successful!")
+            logger.info("POST request successful!")
             data = response.json()
             return data
         else:
-            print("POST request failed with status code:", response.status_code)
+            logger.info("POST request failed with status code:", response.status_code)
     except Exception as e:
-        print("An error occurred:", str(e))
+        logger.info("An error occurred:", str(e))
 
 
 def fetch_token(db, userId):
@@ -437,13 +439,13 @@ def fetch_token(db, userId):
         projection = {"user_id", "token", "refresh_token"}  # You can specify fields to include or exclude in the result
         result = collection.find_one(query, projection)
         if result:
-            print(f'found code for user: {result.get("user_id")}')
+            logger.info(f'found code for user: {result.get("user_id")}')
             return result
         else:
-            print(f'No token found for user: {userId}, persisting token')
+            logger.info(f'No token found for user: {userId}, persisting token')
     except Exception as e:
-        print(f'Failed to fetch token for user: {userId}')
-        print(e)
+        logger.info(f'Failed to fetch token for user: {userId}')
+        logger.info(e)
 
 
 def persist_token(db, userId, token, refresh_token):
@@ -455,9 +457,9 @@ def persist_token(db, userId, token, refresh_token):
         projection = {"user_id", "token", "refresh_token"}  # You can specify fields to include or exclude in the result
         result = collection.find_one(query, projection)
         if result:
-            print(f'found code for user: {result.get("user_id")}')
+            logger.info(f'found code for user: {result.get("user_id")}')
         else:
-            print(f'No token found for user: {userId}, persisting token')
+            logger.info(f'No token found for user: {userId}, persisting token')
             document = {
                 'user_id': userId,
                 'token': token,
@@ -465,8 +467,8 @@ def persist_token(db, userId, token, refresh_token):
             }
             collection.insert_one(document)
     except Exception as e:
-        print(f'Failed to fetch token for user: {userId}')
-        print(e)
+        logger.info(f'Failed to fetch token for user: {userId}')
+        logger.info(e)
 
 
 if __name__ == '__main__':

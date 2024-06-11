@@ -7,6 +7,7 @@ from unstructured.partition.pdf import partition_pdf
 
 from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
 from retriever import create_multi_vector_retriever
+from logging_config import logger
 
 
 # Extract elements from PDF
@@ -34,6 +35,7 @@ def extract_texts(raw_pdf_elements):
     Categorize extracted elements from a PDF into tables and texts.
     raw_pdf_elements: List of unstructured.documents.elements
     """
+    logger.info(f"Extracting text")
     texts = []
     for element in raw_pdf_elements:
         if "unstructured.documents.elements.CompositeElement" in str(type(element)):
@@ -42,22 +44,25 @@ def extract_texts(raw_pdf_elements):
 
 
 def extract_tables(fpath, fname):
+    logger.info(f"Extracting tables")
     # Use camelot to read tables from the PDF
     tables = camelot.read_pdf(fpath + fname, flavor='stream', pages='all')
     dataframes = [table.df for table in tables]
 
+    logger.info(f"Extracting tables complete")
     return dataframes
 
 
 def extract_images(img_path):
     images = []
     # iterate over files in directory
+    logger.info(f"Extracting images")
     if os.path.exists(img_path):
         for filename in os.listdir(img_path):
             if filename.endswith(".jpg"):
                 img = Image.open(os.path.join(img_path, filename))
                 images.append(img)
-
+    logger.info(f"Extracting images complete")
     return images
 
 
@@ -73,12 +78,14 @@ def chunkning_texts(texts):
 
 
 def convert_tables_to_json(tables):
+    logger.info(f"Converting tables to json")
     json_tables = [df.to_json(orient='records') for df in tables]
     return json_tables
 
 
 def process_pdf(fpath, fname, index_name, file_id):
     # File path
+    logger.info(f"In process pdf for file '{fname}'")
     img_path = "figures/"
     # Get elements
     raw_pdf_elements = extract_pdf_elements(fpath, fname)
@@ -97,6 +104,7 @@ def process_pdf(fpath, fname, index_name, file_id):
     img_base64_list, image_summaries = generate_img_summaries(img_path)
     json_tables = convert_tables_to_json(tables)
 
+    logger.info(f"PDF extraction complete for file '{fname}'")
     # Create retriever
     retriever_multi_vector_img = create_multi_vector_retriever(
         text_summaries,

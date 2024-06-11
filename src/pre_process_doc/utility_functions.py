@@ -4,6 +4,7 @@ import psycopg2
 from itsdangerous import URLSafeTimedSerializer
 from pinecone import Pinecone
 from pymongo import MongoClient
+from logging_config import logger
 
 
 # Function to connect to MongoDB
@@ -12,11 +13,11 @@ def connect_to_mongodb():
         MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
         client = MongoClient(MONGODB_URI)
         db = client['Casperai']
-        print("Connected successfully to MongoDB")
+        logger.info("Connected successfully to MongoDB")
         return db
     except Exception as e:
-        print("Failed to connect to MongoDB")
-        print(e)
+        logger.info("Failed to connect to MongoDB")
+        logger.info(e)
 
 
 def get_company_id(db, user_id):
@@ -28,8 +29,8 @@ def get_company_id(db, user_id):
         else:
             return None
     except Exception as e:
-        print(f'Failed to get company id for user: {user_id}')
-        print(e)
+        logger.info(f'Failed to get company id for user: {user_id}')
+        logger.info(e)
 
 
 def query_records_by_metadata(index, metadata_key, metadata_value, namespace=''):
@@ -75,22 +76,22 @@ def delete_records_from_postgres(CONNECTION_STRING, custom_ids):
         cursor.close()
         connection.close()
 
-        print("Records deleted successfully")
+        logger.info("Records deleted successfully")
 
     except (Exception, psycopg2.Error) as error:
-        print("Error while deleting records from PostgreSQL:", error)
+        logger.info("Error while deleting records from PostgreSQL:", error)
 
 
 def delete_records_from_mongodb(file_id):
     db = connect_to_mongodb()
     result = db.documents.delete_many({"docId": file_id})
-    print(f"Deleted {result.deleted_count} records from MongoDB.")
+    logger.info(f"Deleted {result.deleted_count} records from MongoDB.")
 
 
 def delete_file(user_id, file_id):
     db = connect_to_mongodb()
     company_id = get_company_id(db, user_id)
-    print(f"Company ID: {company_id}")
+    logger.info(f"Company ID: {company_id}")
     delete_records_from_mongodb(file_id)
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index = pc.Index(company_id)
@@ -100,17 +101,17 @@ def delete_file(user_id, file_id):
     doc_ids = [record['metadata']['doc_id'] for record in records]
     CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
     delete_records_from_postgres(CONNECTION_STRING, doc_ids)
-    print("Records deleted from PostgreSQL.")
+    logger.info("Records deleted from PostgreSQL.")
     # Delete the records
     delete_records_from_vectordb(index, record_ids)
-    print("Records deleted from vector database.")
+    logger.info("Records deleted from vector database.")
 
 
 def delete_user(user_id):
     db = connect_to_mongodb()
     result = db.users.delete_many({"userId": user_id})
-    print(f"User ID: {user_id}")
-    print(f"Deleted {result.deleted_count} records from MongoDB.")
+    logger.info(f"User ID: {user_id}")
+    logger.info(f"Deleted {result.deleted_count} records from MongoDB.")
 
 
 def generate_confirmation_token(email):
