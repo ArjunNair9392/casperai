@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm your email</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .header {
+        background-color: #007BFF;
+        padding: 10px 0;
+        text-align: center;
+        color: #ffffff;
+      }
+      .content {
+        padding: 20px;
+      }
+      .button-container {
+        text-align: center;
+        margin: 20px 0;
+      }
+      .button {
+        background-color: #007BFF;
+        color: #ffffff !important;
+        padding: 15px 25px;
+        text-decoration: none;
+        border-radius: 5px;
+        font-size: 16px;
+      }
+      .footer {
+        text-align: center;
+        color: #888888;
+        padding: 10px;
+        font-size: 12px;
+      }
+    </style>
+</head>
+<body>
+    <div class="container">
+      <div class="header">
+        <h1>File Processed</h1>
+      </div>
+      <div class="content">
+        <p>Your file has been successfully processed. Click the button below to start chatting with your files:</p>
+        <div class="button-container">
+            <a href="{{ chat_link }}" class="button">Start Chatting</a>
+        </div>
+        <p>Thank you!</p>
+      </div>
+      <div class="footer">
+        <p>&copy; 2024 Your Company. All rights reserved.</p>
+      </div>
+    </div>
+</body>
+</html>
+

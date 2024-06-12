@@ -28,6 +28,7 @@ COPY generate_summaries.py ./generate_summaries.py
 COPY upload_service.py ./uploadApp.py
 COPY logging_config.py ./logging_config.py
 COPY utility_functions.py ./utility_functions.py
+COPY templates/ ./templates/
 RUN pip install --upgrade pip && \
     pip install --default-timeout=1000  -r requirements.txt
 
