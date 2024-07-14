@@ -203,13 +203,11 @@ def get_vectorestore(indexName):
 
 def getRetriever(indexName):
     vectorstore = get_vectorestore(indexName)
-
-    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
     COLLECTION_NAME = indexName
 
     docstore = SQLDocStore(
         collection_name=COLLECTION_NAME,
-        connection_string=CONNECTION_STRING,
+        connection_string=os.getenv("POSTGRES_CONNECTION_STRING"),
     )
     print("Connection to PostgreSQL DB successful")
     id_key = "doc_id"

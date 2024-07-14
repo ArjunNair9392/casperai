@@ -48,13 +48,13 @@ def delete_records_from_vectordb(index, ids, namespace=''):
     index.delete(ids=ids, namespace=namespace)
 
 
-def delete_records_from_postgres(CONNECTION_STRING, custom_ids):
+def delete_records_from_postgres(custom_ids):
     db_params = {
-        "host": "104.154.107.148",
-        "port": "5432",
-        "database": "docstore",
-        "user": "postgres",
-        "password": "casperAI"
+        "host": os.getenv("POSTGRES_HOST_IP"),
+        "port": os.getenv("POSTGRES_PORT"),
+        "database": os.getenv("POSTGRES_DB_NAME"),
+        "user": os.getenv("POSTGRES_USER"),
+        "password": os.getenv("POSTGRES_PASSWORD"),
     }
     try:
         # Connect to the PostgreSQL database
@@ -99,8 +99,7 @@ def delete_file(user_id, file_id):
     # Extract IDs from the query result
     record_ids = [record['id'] for record in records]
     doc_ids = [record['metadata']['doc_id'] for record in records]
-    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
-    delete_records_from_postgres(CONNECTION_STRING, doc_ids)
+    delete_records_from_postgres(doc_ids)
     logger.info("Records deleted from PostgreSQL.")
     # Delete the records
     delete_records_from_vectordb(index, record_ids)

@@ -54,13 +54,11 @@ def create_multi_vector_retriever(
     """
     # Pinecode vectorstore
     vectorstore = get_vectorestore(index_name)
-
-    CONNECTION_STRING = "postgresql+psycopg2://postgres:casperAI@104.154.107.148:5432/docstore"
     COLLECTION_NAME = index_name
 
     docstore = SQLDocStore(
         collection_name=COLLECTION_NAME,
-        connection_string=CONNECTION_STRING,
+        connection_string=os.getenv("POSTGRES_CONNECTION_STRING"),
     )
     logger.info("Connection to PostgreSQL DB successful")
     id_key = "doc_id"
