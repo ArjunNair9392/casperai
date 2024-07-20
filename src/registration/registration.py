@@ -31,6 +31,40 @@ def register_company():
 
     return response,200
 
+@app.route('/addChannel', methods=['POST'])
+def add_channel():
+    # Get data from request
+    data = request.get_json()
+
+    # Extract parameters
+    company_name = data.get('company_name')
+    channel_name = data.get('channel_name')
+    admin_email = data.get('admin_email')
+    db = connect_to_mongodb()
+    persist_channel_info(db, channel_name, company_name, admin_email)
+
+    data = {
+        'status': 'success',
+        'message': 'Channel added successfully'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+
+    return response,200
+
+
+@app.route('/listChannelsForCompany', methods=['GET'])
+def get_channels_by_company():
+    company_name = request.args.get('company_name')
+    db = connect_to_mongodb()
+    channel_names = list_channel_names(db, company_name)
+    if channel_names:
+        response = jsonify({"channel_names": channel_names})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+    else:
+        abort(404)
+
 @app.route('/getAdminInfo', methods=['GET'])
 def get_company():
     admin_email = request.args.get('adminEmail')
@@ -116,6 +150,37 @@ def persist_company_info(db, name, address, city, state, phone_number, admin_ema
     except Exception as e:
         print(f'Failed to insert company info for : {name}')
         print(e)
+
+def persist_channel_info(db, channel_name,company_name, admin_email):
+    try:
+        collection = db['channels']
+        document = {
+            'channel_name': channel_name,
+            'company_name': company_name,
+            'admin_email': admin_email
+        }
+        insert_result = collection.insert_one(document)
+        print(f'Inserted channel info for : {channel_name}, {company_name}')
+    except Exception as e:
+        print(f'Failed to insert channel info for : {channel_name}, {company_name}')
+        print(e)
+
+
+def list_channel_names(db, company_name):
+    try:
+        collection = db['channels']
+
+        # Query to find all documents with the specified company_name
+        query = {'company_name': company_name}
+        documents = collection.find(query)
+
+        # Extract and print all channel_name values
+        channel_names = [doc['channel_name'] for doc in documents]
+        return channel_names
+    except Exception as e:
+        print(f'Failed to list channels for company : {company_name}')
+        print(e)
+
 
 def connect_to_mongodb():
     try:
