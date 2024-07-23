@@ -149,6 +149,7 @@ def process_files():
     file_ids = data.get('fileIds', [])
     user_id = data.get('userId')
     company_id = get_company_id(db, user_id)
+    channel_id = data.get('channel_id')
     creds = get_google_drive_credentials(user_id, "")
     service = build('drive', 'v3', credentials=creds)
 
@@ -165,18 +166,18 @@ def process_files():
         file_name = download_and_save_file(service, file_info)
         logger.info(f"File '{file_name}' downloaded and saved successfully")
         # Persist metadata with IN_PROCESS status
-        persist_document_metadata(db, file_info, company_id, DocumentStatus.IN_PROCESS)
+        persist_document_metadata(db, file_info, company_id, channel_id, DocumentStatus.IN_PROCESS)
         try:
-            process_pdf(app.config['UPLOAD_FOLDER'], file_name, company_id, file_id)
+            process_pdf(app.config['UPLOAD_FOLDER'], file_name, channel_id, file_id)
             logger.info(f"File '{file_info['name']}' processed successfully")
-            persist_document_metadata(db, file_info, company_id, DocumentStatus.SUCCESS)
+            persist_document_metadata(db, file_info, company_id, channel_id, DocumentStatus.SUCCESS)
             logger.info(f"Metadata for file '{file_info['name']}' persisted successfully")
             send_notification(user_id)
         except Exception as e:
             logger.info(f"Error processing file: {file_info['name']}")
             logger.info(f"Error: {e}")
             # Update status to FAILURE on error
-            persist_document_metadata(db, file_info, company_id, DocumentStatus.FAILURE)
+            persist_document_metadata(db, file_info, company_id, channel_id, DocumentStatus.FAILURE)
 
     data = {
         'message': 'Files downloaded and saved from the folder'
@@ -371,7 +372,7 @@ def get_company_id(db, user_id):
 
 
 # Function to persist document metadata into MongoDB
-def persist_document_metadata(db, file_info, company_id, status):
+def persist_document_metadata(db, file_info, company_id, channel_id, status):
     try:
         collection = db['documents']
         # Check if document already exists
@@ -388,6 +389,7 @@ def persist_document_metadata(db, file_info, company_id, status):
                 'docName': file_info['name'],
                 'docUrl': file_info['webViewLink'],
                 'companyId': company_id,
+                'channelId': channel_id,
                 'timestamp': datetime.now(),
                 'status': status.value
             }

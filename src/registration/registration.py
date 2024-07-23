@@ -40,17 +40,29 @@ def add_channel():
     company_name = data.get('company_name')
     channel_name = data.get('channel_name')
     admin_email = data.get('admin_email')
-    db = connect_to_mongodb()
-    persist_channel_info(db, channel_name, company_name, admin_email)
 
-    data = {
-        'status': 'success',
-        'message': 'Channel added successfully'
-    }
-    response = jsonify(data)
+    if not company_name or not channel_name or not admin_email:
+        return jsonify({"error": "company_name, channel_name, and admin_email are required"}), 400
+
+    db = connect_to_mongodb()
+    generated_id = persist_channel_info(db, channel_name, company_name, admin_email)
+
+    if generated_id:
+        response_data = {
+            'status': 'success',
+            'message': 'Channel added successfully',
+            'id': str(generated_id)
+        }
+    else:
+        response_data = {
+            'status': 'failure',
+            'message': 'Failed to add channel'
+        }
+
+    response = jsonify(response_data)
     response.headers.add('Access-Control-Allow-Origin', '*')
 
-    return response,200
+    return response, 200 if generated_id else 500
 
 
 @app.route('/listChannelsForCompany', methods=['GET'])
@@ -151,7 +163,7 @@ def persist_company_info(db, name, address, city, state, phone_number, admin_ema
         print(f'Failed to insert company info for : {name}')
         print(e)
 
-def persist_channel_info(db, channel_name,company_name, admin_email):
+def persist_channel_info(db, channel_name, company_name, admin_email):
     try:
         collection = db['channels']
         document = {
@@ -160,10 +172,14 @@ def persist_channel_info(db, channel_name,company_name, admin_email):
             'admin_email': admin_email
         }
         insert_result = collection.insert_one(document)
-        print(f'Inserted channel info for : {channel_name}, {company_name}')
+        generated_id = insert_result.inserted_id
+        print(f'Inserted channel info for: {channel_name}, {company_name}')
+        return generated_id
     except Exception as e:
-        print(f'Failed to insert channel info for : {channel_name}, {company_name}')
+        print(f'Failed to insert channel info for: {channel_name}, {company_name}')
         print(e)
+        return None
+
 
 
 def list_channel_names(db, company_name):
