@@ -8,6 +8,8 @@ from unstructured.partition.pdf import partition_pdf
 from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
 from retriever import create_multi_vector_retriever
 from logging_config import logger
+from langchain_experimental.text_splitter import SemanticChunker
+from langchain_openai.embeddings import OpenAIEmbeddings
 
 
 # Extract elements from PDF
@@ -66,6 +68,14 @@ def extract_images(img_path):
     return images
 
 
+def semantic_chunking_texts(texts):
+    semantic_chunker = SemanticChunker(OpenAIEmbeddings(model="text-embedding-3-small"),
+                                       breakpoint_threshold_type="percentile")
+    semantic_chunks = semantic_chunker.create_documents(texts)
+    semantic_text_chunks = [doc.page_content for doc in semantic_chunks]
+    return semantic_text_chunks
+
+
 def chunkning_texts(texts):
     # Optional: Enforce a specific token size for texts
     text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
@@ -93,7 +103,7 @@ def process_pdf(fpath, fname, index_name, file_id):
     texts = extract_texts(raw_pdf_elements)
     tables = extract_tables(fpath, fname)
     images = extract_images(img_path)
-    texts_4k_token = chunkning_texts(texts)
+    texts_4k_token = semantic_chunking_texts(texts)
 
     # Get text, table summaries
     text_summaries, table_summaries = generate_text_and_table_summaries(
