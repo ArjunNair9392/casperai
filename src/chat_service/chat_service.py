@@ -4,8 +4,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from PIL import Image
-import flask
-from flask import request, Flask, jsonify
+from flask import request, Flask, jsonify, Response
 from langchain_community.vectorstores import Pinecone as lc_pinecone
 from langchain_openai import OpenAIEmbeddings
 from langchain.retrievers.multi_vector import MultiVectorRetriever
@@ -13,6 +12,12 @@ from pinecone import PodSpec, Pinecone
 from langchain_community.storage import SQLDocStore
 from typing import List
 from langchain_core.retrievers import BaseRetriever, Document
+from slackeventsapi import SlackEventAdapter
+from slack_bolt import App
+from slack_sdk import WebClient
+from slack_bolt.adapter.flask import SlackRequestHandler
+from slack_sdk.web import SlackResponse
+from dotenv import load_dotenv
 
 import io
 import re
@@ -20,13 +25,99 @@ import base64
 import pandas as pd
 from pymongo import MongoClient
 import os
+import flask
+import slack
 
 app = Flask(__name__)
+
+load_dotenv()
+# Initialize the app with your bot token and signing secret
+slack_app = App(
+    token=os.environ.get("SLACK_BOT_TOKEN"),
+    signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
+)
+
+# Create a request handler
+handler = SlackRequestHandler(slack_app)
+
+
+@app.route("/slack/events", methods=["POST"])
+def slack_events():
+    return handler.handle(request)
+
+
+# Event listener for app installation
+@slack_app.event("app_home_opened")
+def handle_channel_creation(event, say):
+    # Get the user ID of the installer
+    user_id = event["user"]
+    slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
+    welcome_message = "Welcome to Casper AI! We will now create 4 private channels for you and please add users!"
+    slack_bot_client.chat_postMessage(channel=user_id, text=welcome_message)
+    slack_client = WebClient(token=os.getenv("SLACK_USER_TOKEN"))
+    welcome_message = "Welcome to Casper AI! We will now create 4 private channels for you and please add users!"
+    slack_client.chat_postMessage(channel=user_id, text=welcome_message)
+    try:
+        # Create a private channel
+        response = slack_client.conversations_create(
+            name="test9",
+            is_private=True
+        )
+
+        channel_id = response["channel"]["id"]
+
+        # Get the bot user ID
+        auth_response = slack_bot_client.auth_test()
+        bot_user_id = auth_response['user_id']
+
+        # Invite the bot to the private channel
+        invite_response = slack_client.conversations_invite(
+            channel=channel_id,
+            users=bot_user_id
+        )
+
+        # Send a welcome message in the channel
+        welcome_message = "Welcome to our Slack workspace! We are excited to have you here."
+        slack_client.chat_postMessage(channel=channel_id, text=welcome_message)
+    except slack.errors.SlackApiError as e:
+        if 'channel_already_exists' in str(e):
+            print("Private channel already exists")
+        else:
+            print(f"Error creating channel: {e}")
+
+
+@app.route('/ask-casper', methods=['POST'])
+def test_call():
+    slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
+    data = request.form
+    user_id = data.get('user_id')
+    channel_id = data.get('channel_id')
+    print(data)
+    print("channel_id: ",channel_id)
+    text = data.get('text')
+
+    response_url = data.get('response_url')
+
+    # Respond to the user with an ephemeral message
+    response_message = f"You said: {text}"
+
+    user_info = slack_client.users_info(user=user_id)
+    email = user_info['user']['profile']['email']
+
+    slack_response = slack_client.chat_postEphemeral(
+        channel=channel_id,
+        text=response_message,
+        user=user_id
+    )
+
+    return Response(), 200
+
 
 def looks_like_base64(sb):
     if not isinstance(sb, str):
         return False
     return re.match("^[A-Za-z0-9+/]+[=]{0,2}$", sb) is not None
+
 
 def is_image_data(b64data):
     """
@@ -47,6 +138,7 @@ def is_image_data(b64data):
     except Exception:
         return False
 
+
 def resize_base64_image(base64_string, size=(128, 128)):
     """
     Resize an image encoded as a Base64 string
@@ -65,6 +157,7 @@ def resize_base64_image(base64_string, size=(128, 128)):
     # Encode the resized image to Base64
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+
 def split_image_text_types(docs):
     """
     Split base64-encoded images and texts
@@ -73,17 +166,18 @@ def split_image_text_types(docs):
     texts = []
     table_df = []
     for doc in docs:
-    # Check if the document is of type Document and extract page_content if so
-      if isinstance(doc, Document):
+        # Check if the document is of type Document and extract page_content if so
+        if isinstance(doc, Document):
             doc = doc.page_content
-      if isinstance(doc, pd.DataFrame):
-          table_df.append(doc)
-      elif looks_like_base64(doc) and is_image_data(doc):
-          doc = resize_base64_image(doc, size=(1300, 600))
-          b64_images.append(doc)
-      else:
-          texts.append(doc)
+        if isinstance(doc, pd.DataFrame):
+            table_df.append(doc)
+        elif looks_like_base64(doc) and is_image_data(doc):
+            doc = resize_base64_image(doc, size=(1300, 600))
+            b64_images.append(doc)
+        else:
+            texts.append(doc)
     return {"images": b64_images, "texts": texts, "tables": table_df}
+
 
 def img_prompt_func(data_dict):
     """
@@ -92,7 +186,6 @@ def img_prompt_func(data_dict):
 
     formatted_texts = "\n".join([str(elem) for sublist in data_dict["context"]["texts"] for elem in sublist])
     messages = []
-
 
     # Adding table(s) to the messages if present
     table_message = ""
@@ -130,7 +223,8 @@ def img_prompt_func(data_dict):
     }
     messages.append(text_message)
     return [HumanMessage(content=messages)]
-    
+
+
 def multi_modal_rag_chain(retriever):
     """
     Multi-modal RAG chain
@@ -140,16 +234,17 @@ def multi_modal_rag_chain(retriever):
 
     # RAG pipeline
     chain = (
-        {
-            "context": retriever | RunnableLambda(split_image_text_types),
-            "question": RunnablePassthrough(),
-        }
-        | RunnableLambda(img_prompt_func)
-        | model
-        | StrOutputParser()
+            {
+                "context": retriever | RunnableLambda(split_image_text_types),
+                "question": RunnablePassthrough(),
+            }
+            | RunnableLambda(img_prompt_func)
+            | model
+            | StrOutputParser()
     )
 
     return chain
+
 
 def fetchIndexName(user_id, channel_name):
     MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
@@ -183,11 +278,12 @@ def get_channel_id_by_name_and_company(db, channel_name, company_name):
         print(e)
         return None
 
+
 def get_vectorestore(indexName):
     # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     # pinecone.deinitialize()
 
-    pc = Pinecone( api_key=os.getenv("PINECONE_API_KEY") )
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index_name = indexName
     indexes = pc.list_indexes().names()
     if index_name in indexes:
@@ -219,6 +315,7 @@ def get_vectorestore(indexName):
 
     return vectorstore
 
+
 def getRetriever(indexName):
     vectorstore = get_vectorestore(indexName)
     COLLECTION_NAME = indexName
@@ -238,6 +335,7 @@ def getRetriever(indexName):
     )
 
     return retriever
+
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -268,10 +366,11 @@ def chat():
     history_aware_retriever = lambda query: (retriever.get_relevant_documents(full_query, limit=3), history)
     chain_multimodal_rag = multi_modal_rag_chain(history_aware_retriever)
     response = chain_multimodal_rag.invoke({
-        "question" : question,
+        "question": question,
         "history": history
     })
     return jsonify(response)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
