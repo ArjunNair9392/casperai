@@ -1,36 +1,38 @@
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-from langchain_core.messages import HumanMessage
-from langchain_core.documents import Document
-from langchain_openai import ChatOpenAI
-from PIL import Image
-from flask import request, Flask, jsonify, Response
-from langchain_community.vectorstores import Pinecone as lc_pinecone
-from langchain_openai import OpenAIEmbeddings
-from langchain.retrievers.multi_vector import MultiVectorRetriever
-from pinecone import PodSpec, Pinecone
-from langchain_community.storage import SQLDocStore
-from typing import List
-from langchain_core.retrievers import BaseRetriever, Document
-from slackeventsapi import SlackEventAdapter
-from slack_bolt import App
-from slack_sdk import WebClient
-from slack_bolt.adapter.flask import SlackRequestHandler
-from slack_sdk.web import SlackResponse
-from dotenv import load_dotenv
-
 import io
 import re
 import base64
 import pandas as pd
-from pymongo import MongoClient
 import os
 import flask
 import slack
 
+from dotenv import load_dotenv
+from flask import request, Flask, jsonify, Response
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
+from langchain_pinecone import PineconeVectorStore
+from langchain_openai import OpenAIEmbeddings
+from langchain_core.retrievers import Document
+from PIL import Image
+from pinecone import PodSpec, Pinecone
+from pymongo import MongoClient
+
+# Slack Libraries
+from slack_bolt import App
+from slack_sdk import WebClient
+from slack_bolt.adapter.flask import SlackRequestHandler
+
+# Local Python files
+from docstore.sqlalchemy_docstore import SQLAlchemyDocStore
+from retriever.multi_vector_retriever import CustomMultiVectorRetriever
+
+
 app = Flask(__name__)
 
 load_dotenv()
+
 # Initialize the app with your bot token and signing secret
 slack_app = App(
     token=os.environ.get("SLACK_BOT_TOKEN"),
@@ -92,8 +94,6 @@ def test_call():
     data = request.form
     user_id = data.get('user_id')
     channel_id = data.get('channel_id')
-    print(data)
-    print("channel_id: ",channel_id)
     text = data.get('text')
 
     response_url = data.get('response_url')
@@ -246,8 +246,9 @@ def multi_modal_rag_chain(retriever):
     return chain
 
 
-def fetchIndexName(user_id, channel_name):
-    MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+def fetch_index_name(user_id, channel_name):
+    MONGODB_URI = ("mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority"
+                   "&appName=Cluster0");
     try:
         client = MongoClient(MONGODB_URI)
         db = client['Casperai']
@@ -261,6 +262,7 @@ def fetchIndexName(user_id, channel_name):
     except Exception as e:
         print("Failed to connect to MongoDB")
         print(e)
+
 
 def get_channel_id_by_name_and_company(db, channel_name, company_name):
     try:
@@ -280,18 +282,15 @@ def get_channel_id_by_name_and_company(db, channel_name, company_name):
 
 
 def get_vectorestore(indexName):
-    # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    # pinecone.deinitialize()
-
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index_name = indexName
     indexes = pc.list_indexes().names()
     if index_name in indexes:
-        print("Pinecode index found")
+        print("Pinecone index found")
         index = pc.Index(index_name)
     else:
         # Create the index in case it doesn't exist
-        print("Pinecode index not found, creating one")
+        print("Pinecone index not found, creating one")
         pc.create_index(
             name=index_name,
             dimension=1536,
@@ -300,35 +299,29 @@ def get_vectorestore(indexName):
         )
         index = pc.Index(index_name)
 
-    #OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-    # model_name = 'text-embedding-ada-002'
     model_name = 'text-embedding-3-small'
 
     embed = OpenAIEmbeddings(
         model=model_name,
         openai_api_key=os.getenv("OPENAI_API_KEY")
     )
-
     # Instantiate Pinecone vectorstore
-    vectorstore = lc_pinecone(index, embed, "text")
+    vectorstore = PineconeVectorStore(index_name=index_name, embedding=embed)
 
     return vectorstore
 
 
-def getRetriever(indexName):
-    vectorstore = get_vectorestore(indexName)
-    COLLECTION_NAME = indexName
+def get_retriever(index_name):
+    vectorstore = get_vectorestore(index_name)
+    COLLECTION_NAME = index_name
 
-    docstore = SQLDocStore(
-        collection_name=COLLECTION_NAME,
-        connection_string=os.getenv("POSTGRES_CONNECTION_STRING"),
-    )
-    print("Connection to PostgreSQL DB successful")
+    docstore = SQLAlchemyDocStore(db_url=os.getenv("POSTGRES_CONNECTION_STRING"), namespace=COLLECTION_NAME)
+
+    print("Connection to Postgres DB successful")
     id_key = "doc_id"
 
     # Create the multi-vector retriever
-    retriever = MultiVectorRetriever(
+    retriever = CustomMultiVectorRetriever(
         vectorstore=vectorstore,
         docstore=docstore,
         id_key=id_key,
@@ -343,9 +336,13 @@ def chat():
     userId = data.get('userId')
     channel_id = data.get('channel_name')
     query = data.get('query')
-    indexName = fetchIndexName(userId, channel_id)
-    retriever = getRetriever(indexName)
-    vectorstore = get_vectorestore(indexName)
+    index_name = fetch_index_name(userId, channel_id)
+
+    # TODO: fetchIndexName is not working as expected
+    index_name = "casper"
+
+    retriever = get_retriever(index_name)
+    vectorstore = get_vectorestore(index_name)
     last_item = query[-1]
     # Extract and remove the last element with role="user" as question
     if last_item['role'] == 'user':

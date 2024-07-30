@@ -1,10 +1,11 @@
 import os
-
 import psycopg2
+
 from itsdangerous import URLSafeTimedSerializer
+from logging_config import logger
 from pinecone import Pinecone
 from pymongo import MongoClient
-from logging_config import logger
+
 
 
 # Function to connect to MongoDB

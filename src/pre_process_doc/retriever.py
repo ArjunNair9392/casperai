@@ -2,12 +2,14 @@ import os
 import uuid
 
 from langchain.retrievers.multi_vector import MultiVectorRetriever
-from langchain_community.storage import SQLDocStore
-from langchain_community.vectorstores import Pinecone as lc_pinecone
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
-from pinecone import Pinecone, ServerlessSpec
+from langchain_pinecone import PineconeVectorStore
 from logging_config import logger
+from pinecone import Pinecone, ServerlessSpec
+
+# Local Python files
+from docstore.sqlalchemy_docstore import SQLAlchemyDocStore
 
 
 def get_vectorestore(indexName):
@@ -17,11 +19,11 @@ def get_vectorestore(indexName):
     logger.info("Indexes: ")
     logger.info(indexes)
     if index_name in indexes:
-        logger.info("Pinecode index found")
+        logger.info("Pinecone index found")
         index = pc.Index(index_name)
     else:
         # Create the index in case it doesn't exist
-        logger.info("Pinecode index not found, creating one")
+        logger.info("Pinecone index not found, creating one")
         pc.create_index(
             name=index_name,
             dimension=1536,
@@ -41,7 +43,7 @@ def get_vectorestore(indexName):
     )
 
     # Instantiate Pinecone vectorstore
-    vectorstore = lc_pinecone(index, embed.embed_query, "text")
+    vectorstore = PineconeVectorStore(index_name=index_name, embedding=embed)
 
     return vectorstore
 
@@ -52,33 +54,35 @@ def create_multi_vector_retriever(
     """
     Create retriever that indexes summaries, but returns raw images or texts
     """
-    # Pinecode vectorstore
+    # Pinecone vectorstore
     vectorstore = get_vectorestore(index_name)
     COLLECTION_NAME = index_name
 
-    docstore = SQLDocStore(
-        collection_name=COLLECTION_NAME,
-        connection_string=os.getenv("POSTGRES_CONNECTION_STRING"),
-    )
-    logger.info("Connection to PostgreSQL DB successful")
+    postgres_docstore = SQLAlchemyDocStore(db_url=os.getenv("POSTGRES_CONNECTION_STRING"), namespace=COLLECTION_NAME)
+
+    logger.info("Connection to Postgres DB successful")
     id_key = "doc_id"
 
     # Create the multi-vector retriever
     retriever = MultiVectorRetriever(
         vectorstore=vectorstore,
-        docstore=docstore,
+        docstore=postgres_docstore,
         id_key=id_key,
     )
 
     # Helper function to add documents to the vectorstore and docstore
-    def add_documents(retriever, doc_summaries, doc_contents, file_id):
+    def add_documents(local_retriever, doc_summaries, doc_contents, local_file_id):
         doc_ids = [str(uuid.uuid4()) for _ in doc_contents]
+        documents = [
+            (doc_ids[i], doc_contents[i], {"file_id": file_id})
+            for i in range(len(doc_contents))
+        ]
         summary_docs = [
-            Document(page_content=s, metadata={id_key: doc_ids[i], "file_id": file_id})
+            Document(page_content=s, metadata={id_key: doc_ids[i], "file_id": local_file_id})
             for i, s in enumerate(doc_summaries)
         ]
-        retriever.vectorstore.add_documents(summary_docs)
-        retriever.docstore.mset(list(zip(doc_ids, doc_contents)))
+        local_retriever.vectorstore.add_documents(summary_docs)
+        local_retriever.docstore.mset(documents)
 
     # Add texts, tables, and images
     # Check that text_summaries is not empty before adding

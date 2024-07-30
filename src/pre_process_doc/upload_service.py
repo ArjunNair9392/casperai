@@ -1,11 +1,11 @@
 import io
 import os
 import subprocess
-from datetime import datetime
-from enum import Enum
-
 import flask
 import requests
+
+from datetime import datetime
+from enum import Enum
 from flask import request, Flask, jsonify, make_response, url_for, render_template
 from flask_cors import CORS
 from flask_mail import Mail, Message
@@ -15,12 +15,13 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from pymongo import MongoClient
-import logging
+from logging_config import logger
 
+# Local Python files
 from extraction import process_pdf
 from utility_functions import delete_user, delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
     confirm_token, get_shared_users
-from logging_config import logger
+
 
 # Define Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.readonly']

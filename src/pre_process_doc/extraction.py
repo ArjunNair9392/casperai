@@ -1,15 +1,17 @@
+# Python Libraries
 import os
-
 import camelot
-from PIL import Image
-from langchain.text_splitter import CharacterTextSplitter
-from unstructured.partition.pdf import partition_pdf
 
-from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
-from retriever import create_multi_vector_retriever
-from logging_config import logger
+from langchain.text_splitter import CharacterTextSplitter
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain_openai.embeddings import OpenAIEmbeddings
+from unstructured.partition.pdf import partition_pdf
+from logging_config import logger
+from PIL import Image
+
+# Import local python files
+from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
+from retriever import create_multi_vector_retriever
 
 
 # Extract elements from PDF
@@ -76,6 +78,8 @@ def semantic_chunking_texts(texts):
     return semantic_text_chunks
 
 
+# TODO: Can be removed as we no longer chunk texts this way.
+# Look at semantic_chunking_texts.
 def chunkning_texts(texts):
     # Optional: Enforce a specific token size for texts
     text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
@@ -103,11 +107,11 @@ def process_pdf(fpath, fname, index_name, file_id):
     texts = extract_texts(raw_pdf_elements)
     tables = extract_tables(fpath, fname)
     images = extract_images(img_path)
-    texts_4k_token = semantic_chunking_texts(texts)
+    chunked_texts = semantic_chunking_texts(texts)
 
     # Get text, table summaries
     text_summaries, table_summaries = generate_text_and_table_summaries(
-        texts_4k_token, tables, summarize_texts=True
+        chunked_texts, tables, summarize_texts=True
     )
 
     # Image summaries
@@ -118,7 +122,7 @@ def process_pdf(fpath, fname, index_name, file_id):
     # Create retriever
     retriever_multi_vector_img = create_multi_vector_retriever(
         text_summaries,
-        texts,
+        chunked_texts,
         table_summaries,
         json_tables,
         image_summaries,
