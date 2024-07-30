@@ -334,13 +334,10 @@ def get_retriever(index_name):
 def chat():
     data = flask.request.get_json()
     userId = data.get('userId')
-    channel_id = data.get('channel_name')
+    channel_name = data.get('channel_name')
     query = data.get('query')
-    index_name = fetch_index_name(userId, channel_id)
-
-    # TODO: fetchIndexName is not working as expected
-    index_name = "casper"
-
+    index_name = fetch_index_name(userId, channel_name)
+    logger.info(f"Index name: {index_name}")
     retriever = get_retriever(index_name)
     vectorstore = get_vectorestore(index_name)
     last_item = query[-1]

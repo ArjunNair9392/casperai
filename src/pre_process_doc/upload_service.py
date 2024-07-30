@@ -20,7 +20,7 @@ from logging_config import logger
 # Local Python files
 from extraction import process_pdf
 from utility_functions import delete_user, delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
-    confirm_token, get_shared_users
+    confirm_token, get_shared_users, get_channel_id_by_name_and_company
 
 
 # Define Google Drive API scopes
@@ -150,7 +150,9 @@ def process_files():
     file_ids = data.get('fileIds', [])
     user_id = data.get('userId')
     company_id = get_company_id(db, user_id)
-    channel_id = data.get('channel_id')
+    channel_name = data.get('channel_name')
+    index_name = get_channel_id_by_name_and_company(db,channel_name, company_id)
+    logger.info(f"Index name: {index_name}")
     creds = get_google_drive_credentials(user_id, "")
     service = build('drive', 'v3', credentials=creds)
 
@@ -167,18 +169,18 @@ def process_files():
         file_name = download_and_save_file(service, file_info)
         logger.info(f"File '{file_name}' downloaded and saved successfully")
         # Persist metadata with IN_PROCESS status
-        persist_document_metadata(db, file_info, company_id, channel_id, DocumentStatus.IN_PROCESS)
+        persist_document_metadata(db, file_info, company_id, channel_name, DocumentStatus.IN_PROCESS)
         try:
-            process_pdf(app.config['UPLOAD_FOLDER'], file_name, channel_id, file_id)
+            process_pdf(app.config['UPLOAD_FOLDER'], file_name, index_name, file_id)
             logger.info(f"File '{file_info['name']}' processed successfully")
-            persist_document_metadata(db, file_info, company_id, channel_id, DocumentStatus.SUCCESS)
+            persist_document_metadata(db, file_info, company_id, channel_name, DocumentStatus.SUCCESS)
             logger.info(f"Metadata for file '{file_info['name']}' persisted successfully")
             send_notification(user_id)
         except Exception as e:
             logger.info(f"Error processing file: {file_info['name']}")
             logger.info(f"Error: {e}")
             # Update status to FAILURE on error
-            persist_document_metadata(db, file_info, company_id, channel_id, DocumentStatus.FAILURE)
+            persist_document_metadata(db, file_info, company_id, channel_name, DocumentStatus.FAILURE)
 
     data = {
         'message': 'Files downloaded and saved from the folder'

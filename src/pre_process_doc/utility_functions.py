@@ -140,3 +140,20 @@ def get_shared_users(user_id):
     # Extract user IDs from the query result
     user_ids = [user['userId'] for user in users]
     return user_ids
+
+def get_channel_id_by_name_and_company(db, channel_name, company_name):
+    try:
+        collection = db['channels']
+        document = collection.find_one({
+            'channel_name': channel_name,
+            'company_name': company_name
+        }, {'_id': 1})  # Only retrieve the _id field
+        if document:
+            return document.get('_id')
+        else:
+            return None
+    except Exception as e:
+        print(f'Failed to get channel id for channel: {channel_name} and company: {company_name}')
+        print(e)
+        return None
+
