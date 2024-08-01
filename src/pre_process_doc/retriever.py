@@ -23,7 +23,7 @@ def get_vectorestore(indexName):
         index = pc.Index(index_name)
     else:
         # Create the index in case it doesn't exist
-        logger.info("Pinecone index not found, creating one")
+        logger.info("Pinecone index not found, creating one: ", index_name)
         pc.create_index(
             name=index_name,
             dimension=1536,

@@ -4,6 +4,7 @@ import subprocess
 import flask
 import requests
 
+from bson import ObjectId
 from datetime import datetime
 from enum import Enum
 from flask import request, Flask, jsonify, make_response, url_for, render_template
@@ -146,12 +147,14 @@ def delete_user_service():
 @app.route('/processFiles', methods=['POST'])
 def process_files():
     db = connect_to_mongodb()
+    obj_id = ObjectId()
     data = flask.request.get_json()
     file_ids = data.get('fileIds', [])
     user_id = data.get('userId')
     company_id = get_company_id(db, user_id)
     channel_name = data.get('channel_name')
-    index_name = get_channel_id_by_name_and_company(db,channel_name, company_id)
+    index_name = get_channel_id_by_name_and_company(db, channel_name, company_id)
+    index_name = str(index_name)
     logger.info(f"Index name: {index_name}")
     creds = get_google_drive_credentials(user_id, "")
     service = build('drive', 'v3', credentials=creds)

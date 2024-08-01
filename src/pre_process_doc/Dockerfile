@@ -21,7 +21,7 @@ libreoffice \
 # Set PYTHONPATH environment variable
 ENV PYTHONPATH="/usr/lib/libreoffice/program"
 
-COPY ./requirements.txt ./requirements.txt
+COPY ./requirements_latest.txt ./requirements_latest.txt
 COPY extraction.py ./extraction.py
 COPY retriever.py ./retriever.py
 COPY generate_summaries.py ./generate_summaries.py
@@ -29,8 +29,9 @@ COPY upload_service.py ./uploadApp.py
 COPY logging_config.py ./logging_config.py
 COPY utility_functions.py ./utility_functions.py
 COPY templates/ ./templates/
+COPY docstore/ ./docstore/
 RUN pip install --upgrade pip && \
-    pip install --default-timeout=1000  -r requirements.txt
+    pip install --default-timeout=1000  -r requirements_latest.txt
 
 EXPOSE 8080
 
