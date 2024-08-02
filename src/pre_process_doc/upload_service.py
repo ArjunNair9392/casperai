@@ -66,7 +66,7 @@ def send_email(to, subject, template):
     mail.send(msg)
 
 
-@app.route('/emailConfirmation', methods=['POST'])
+@app.route('/email-confirmation', methods=['POST'])
 def trigger_email_confirmation():
     data = flask.request.get_json()
     user_id = data.get('userId')
@@ -99,7 +99,7 @@ def send_notification(user_id):
         send_email(user_id, subject, html)
 
 
-@app.route('/comfirmEmail/<token>')
+@app.route('/confirm-email/<token>')
 def confirm_email(token):
     email = confirm_token(token)
     db = connect_to_mongodb()
@@ -114,7 +114,7 @@ def confirm_email(token):
 
 
 # Function to delete the file data from vector DB and postgres database
-@app.route('/deleteFile', methods=['POST'])
+@app.route('/delete-file', methods=['POST'])
 def delete_file_service():
     data = flask.request.get_json()
     file_id = data.get('fileId')
@@ -129,7 +129,7 @@ def delete_file_service():
     return response, 200
 
 
-@app.route('/deleteUser', methods=['POST'])
+@app.route('/delete-user', methods=['POST'])
 def delete_user_service():
     data = flask.request.get_json()
     user_id = data.get('userId')
@@ -144,17 +144,17 @@ def delete_user_service():
 
 
 # Function to handle processing files from Google Drive
-@app.route('/processFiles', methods=['POST'])
+@app.route('/process-files', methods=['POST'])
 def process_files():
     db = connect_to_mongodb()
-    obj_id = ObjectId()
     data = flask.request.get_json()
     file_ids = data.get('fileIds', [])
     user_id = data.get('userId')
     company_id = get_company_id(db, user_id)
     channel_name = data.get('channel_name')
     index_name = get_channel_id_by_name_and_company(db, channel_name, company_id)
-    index_name = str(index_name)
+    if isinstance(index_name, ObjectId):
+        index_name = str(index_name)
     logger.info(f"Index name: {index_name}")
     creds = get_google_drive_credentials(user_id, "")
     service = build('drive', 'v3', credentials=creds)
@@ -194,7 +194,7 @@ def process_files():
 
 
 # Function to list files from Google Drive
-@app.route('/listFiles', methods=['GET'])
+@app.route('/list-files', methods=['GET'])
 def list_files():
     user_id = request.args.get('userId')
     code = request.args.get('code')
@@ -209,7 +209,7 @@ def list_files():
     return response
 
 
-@app.route('/getFilesForUser', methods=['GET'])
+@app.route('/get-files-for-user', methods=['GET'])
 def get_file_status():
     try:
         user_id = request.args.get('userId')
@@ -250,7 +250,7 @@ def get_documents_by_company(db, company_id):
 
 
 # Function to get users for a particular company
-@app.route('/getSharedUsers', methods=['GET'])
+@app.route('/get-shared-users', methods=['GET'])
 def get_users():
     user_id = request.args.get('userId')
     user_ids = get_shared_users(user_id)
