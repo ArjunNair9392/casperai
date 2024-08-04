@@ -77,6 +77,7 @@ def persist_channel_info(db, channel_name, company_id, admin_email):
                 'company_id': company_id,
                 'admin_email': admin_email,
                 'member_ids': [str(user['_id'])],
+                'slack_channel_id': '',
                 'timestamp': datetime.now(),
             }
             insert_result = collection.insert_one(document)
