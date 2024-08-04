@@ -88,7 +88,7 @@ def handle_channel_creation(event, say):
 
                     result = channels_collection.update_one(
                         {"_id": channel['_id']},
-                        {"$set": {"slack_channel_id": True}}
+                        {"$set": {"slack_channel_id": slack_channel_id}}
                     )
 
                     # Send a welcome message in the channel
@@ -99,6 +99,52 @@ def handle_channel_creation(event, say):
             print("Private channel already exists")
         else:
             print(f"Error creating channel: {e}")
+
+
+# Event listener for member joining a channel
+@slack_app.event("message")
+def handle_member_joined_channel(body, logger):
+    user_id = body['event']['user']
+    channel_id = body['event']['channel']
+    channel_sub_type = body['event']['subtype']
+    slack_user_client = WebClient(token=os.getenv("SLACK_USER_TOKEN"))
+    slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
+    user_info = slack_bot_client.users_info(user=user_id)
+    user_email = user_info['user']['profile']['email']
+    db = connect_to_mongodb()
+    channels_collection = db['channels']
+    channel = channels_collection.find_one({'slack_channel_id': channel_id})
+    users_collection = db['users']
+    user = users_collection.find_one({'user_email': user_email})
+
+    if channel_sub_type == "channel_leave" and user:
+        print("str(user['_id']): ", str(user['_id']))
+        update_result = channels_collection.update_many(
+            {"member_ids": str(user['_id'])},
+            {"$pull": {"member_ids": str(user['_id'])}}
+        )
+        result = users_collection.delete_one({'user_email': user_email})
+        print(f"User {user_email} left channel {channel_id}")
+        return
+    elif user is None:
+        new_user = {
+            "user_email": user_email,
+            "company_id": channel['company_id'],
+            "is_verified": False,
+            "slack_app_opened": False
+        }
+
+        # Insert the new user document into the user collection
+        insert_result = users_collection.insert_one(new_user)
+
+        # Get the _id of the newly created document
+        new_user_id = insert_result.inserted_id
+
+        print(f"User {user_email} joined channel {channel_id}")
+        result = channels_collection.update_one(
+            {"_id": channel['_id']},
+            {"$addToSet": {"member_ids": str(new_user_id)}}
+        )
 
 
 def call_chat_service(user_id, channel_id, user_email, channel_name, query):
