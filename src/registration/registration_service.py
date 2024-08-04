@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 from bson import ObjectId
 
-from utility_functions import connect_to_mongodb, persist_company_info, add_users, get_company_for_user, \
+from registration_service_helper import connect_to_mongodb, persist_company_info, add_users, get_company_for_user, \
     persist_channel_info, list_channel_names
 
 app = Flask(__name__)

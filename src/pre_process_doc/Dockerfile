@@ -27,7 +27,7 @@ COPY retriever.py ./retriever.py
 COPY generate_summaries.py ./generate_summaries.py
 COPY upload_service.py ./uploadApp.py
 COPY logging_config.py ./logging_config.py
-COPY utility_functions.py ./utility_functions.py
+COPY upload_service_helper.py ./upload_service_helper.py
 COPY templates/ ./templates/
 COPY docstore/ ./docstore/
 RUN pip install --upgrade pip && \

@@ -1,31 +1,20 @@
-import io
 import os
-import subprocess
-import flask
-import requests
-
-from bson import ObjectId
-from datetime import datetime
+import os
 from enum import Enum
+
+import flask
 from flask import request, Flask, jsonify, make_response, url_for, render_template
 from flask_cors import CORS
-from flask_mail import Mail, Message
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from flask_mail import Mail
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-from pymongo import MongoClient
-from logging_config import logger
 
 # Local Python files
 from extraction import process_pdf
-from utility_functions import delete_user, delete_file, connect_to_mongodb, get_company_id, generate_confirmation_token, \
-    confirm_token, get_shared_users, get_channel_id_by_name_and_company
-
-
-# Define Google Drive API scopes
-SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+from logging_config import logger
+from upload_service_helper import delete_user, delete_file, connect_to_mongodb, get_company_id, \
+    generate_confirmation_token, confirm_token, get_channel_members, get_channel_id, get_documents_by_channel, \
+    get_google_drive_credentials, get_file_info, download_and_save_file, persist_document_metadata, \
+    get_files_from_drive, send_notification, send_email
 
 # Define upload folder path
 UPLOAD_FOLDER = './uploads/'
@@ -56,134 +45,47 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 
-def send_email(to, subject, template):
-    msg = Message(
-        subject,
-        recipients=[to],
-        html=template,
-        sender=os.getenv('MAIL_DEFAULT_SENDER')
-    )
-    mail.send(msg)
-
-
-@app.route('/email-confirmation', methods=['POST'])
-def trigger_email_confirmation():
-    data = flask.request.get_json()
-    user_id = data.get('userId')
-    token = generate_confirmation_token(user_id)
-    confirm_url = url_for('confirm_email', token=token, _external=True)
-    html = render_template('activate.html', confirm_url=confirm_url)
-
-    subject = "Please confirm your email"
-    send_email(user_id, subject, html)
-    data = {
-        'message': f'Confirmation email has been send to {user_id}.'
-    }
-    response = jsonify(data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response, 200
-
-
-def send_notification(user_id):
-    chat_link = "/"
-    user_ids = get_shared_users(user_id)
-
-    for user_id in user_ids:
-        # Generate the email content
-        html = render_template('notification.html', chat_link=chat_link)
-
-        # Subject of the email
-        subject = "Your file has been processed"
-
-        # Send the email
-        send_email(user_id, subject, html)
-
-
-@app.route('/confirm-email/<token>')
-def confirm_email(token):
-    email = confirm_token(token)
-    db = connect_to_mongodb()
-    collection = db['users']
-    user = collection.find_one({"userId": email})
-    if user:
-        collection.update_one({"userId": email}, {"$set": {"isVerified": True}})
-        return render_template('confirmed.html')
-    else:
-        logger.info('User not found or unable to update MongoDB.', 'danger')
-        return render_template('expired.html')
-
-
-# Function to delete the file data from vector DB and postgres database
-@app.route('/delete-file', methods=['POST'])
-def delete_file_service():
-    data = flask.request.get_json()
-    file_id = data.get('fileId')
-    user_id = data.get('userId')
-    logger.info(f"File id is being deleted '{file_id}'")
-    delete_file(user_id, file_id)
-    data = {
-        'message': 'File successfully deleted'
-    }
-    response = jsonify(data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response, 200
-
-
-@app.route('/delete-user', methods=['POST'])
-def delete_user_service():
-    data = flask.request.get_json()
-    user_id = data.get('userId')
-    logger.info(f"User id is being deleted '{user_id}'")
-    delete_user(user_id)
-    data = {
-        'message': 'User successfully deleted'
-    }
-    response = jsonify(data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response, 200
-
-
 # Function to handle processing files from Google Drive
 @app.route('/process-files', methods=['POST'])
 def process_files():
     db = connect_to_mongodb()
     data = flask.request.get_json()
-    file_ids = data.get('fileIds', [])
-    user_id = data.get('userId')
-    company_id = get_company_id(db, user_id)
+    file_ids = data.get('file_ids', [])
+    user_email = data.get('user_email')
     channel_name = data.get('channel_name')
-    index_name = get_channel_id_by_name_and_company(db, channel_name, company_id)
-    if isinstance(index_name, ObjectId):
-        index_name = str(index_name)
-    logger.info(f"Index name: {index_name}")
-    creds = get_google_drive_credentials(user_id, "")
+    company_id = get_company_id(db, user_email)
+
+    # channel_id is the index name tied to pinecone index
+    channel_id = get_channel_id(db, channel_name, company_id)
+    logger.info(f"Index name: {channel_id}")
+    creds = get_google_drive_credentials(user_email, "")
     service = build('drive', 'v3', credentials=creds)
 
     for file_id in file_ids:
         file_info = get_file_info(service, file_id)
         collection = db['documents']
         # Check if document already exists
-        existing_document = collection.find_one({'docId': file_info['id']})
+        existing_document = collection.find_one({'doc_id': file_info['id']})
         if existing_document:
             status = existing_document['status']
             if status == "SUCCESS":
                 continue
         logger.info(f"Processing file: {file_info['name']}")
-        file_name = download_and_save_file(service, file_info)
+        file_name = download_and_save_file(service, file_info, app)
         logger.info(f"File '{file_name}' downloaded and saved successfully")
         # Persist metadata with IN_PROCESS status
-        persist_document_metadata(db, file_info, company_id, channel_name, DocumentStatus.IN_PROCESS)
+        persist_document_metadata(db, file_info, channel_id, DocumentStatus.IN_PROCESS)
         try:
-            process_pdf(app.config['UPLOAD_FOLDER'], file_name, index_name, file_id)
+            process_pdf(app.config['UPLOAD_FOLDER'], file_name, channel_id, file_id)
             logger.info(f"File '{file_info['name']}' processed successfully")
-            persist_document_metadata(db, file_info, company_id, channel_name, DocumentStatus.SUCCESS)
+            persist_document_metadata(db, file_info, channel_id, DocumentStatus.SUCCESS)
             logger.info(f"Metadata for file '{file_info['name']}' persisted successfully")
-            send_notification(user_id)
+            send_notification(user_email, mail, channel_id)
         except Exception as e:
             logger.info(f"Error processing file: {file_info['name']}")
             logger.info(f"Error: {e}")
             # Update status to FAILURE on error
-            persist_document_metadata(db, file_info, company_id, channel_name, DocumentStatus.FAILURE)
+            persist_document_metadata(db, file_info, channel_id, DocumentStatus.FAILURE)
 
     data = {
         'message': 'Files downloaded and saved from the folder'
@@ -194,12 +96,12 @@ def process_files():
 
 
 # Function to list files from Google Drive
-@app.route('/list-files', methods=['GET'])
+@app.route('/list-files-from-gdrive', methods=['GET'])
 def list_files():
-    user_id = request.args.get('userId')
+    user_email = request.args.get('user_email')
     code = request.args.get('code')
-    logger.info(f"User id we are pulling the file for for file is '{user_id}'")
-    creds = get_google_drive_credentials(user_id, code)
+    logger.info(f"User id we are pulling the file for for file is '{user_email}'")
+    creds = get_google_drive_credentials(user_email, code)
     service = build('drive', 'v3', credentials=creds)
     files = get_files_from_drive(service)
     logger.info("Files retrieved successfully from Google Drive")
@@ -209,14 +111,17 @@ def list_files():
     return response
 
 
-@app.route('/get-files-for-user', methods=['GET'])
+@app.route('/list-files-from-channel', methods=['GET'])
 def get_file_status():
     try:
-        user_id = request.args.get('userId')
+        user_email = request.args.get('user_email')
+        channel_name = request.args.get('channel_name')
         db = connect_to_mongodb()
-        company_id = get_company_id(db, user_id)
-        logger.info(f"Fetching file statuses for user: '{user_id}' and company: '{company_id}'")
-        data = get_documents_by_company(db, company_id)
+        company_id = get_company_id(db, user_email)
+        channel_id = get_channel_id(db, channel_name, company_id)
+        logger.info(
+            f"Fetching file statuses for user: '{user_email}', company: '{company_id}' and channel: '{channel_id}'")
+        data = get_documents_by_channel(db, channel_id)
         jsonData = jsonify(data)
         response = make_response(jsonData)
         response.headers.add('Content-Type', 'application/json')
@@ -234,239 +139,79 @@ def get_file_status():
         return response, 500
 
 
-def get_documents_by_company(db, company_id):
-    try:
-        collection = db['documents']
-        document_filter = {'companyId': company_id}
-        projection = {'docId': 1, 'docName': 1, 'status': 1, '_id': 0,
-                      'docUrl': 1}
-        documents = collection.find(document_filter, projection)
-        document_list = list(documents)
-        return document_list  # Convert document list to JSON
-    except Exception as e:
-        logger.info(f'Failed to retrieve documents for company_id: {company_id}')
-        logger.info(e)
-        return '[]'  # Return empty JSON array in case of error
-
-
 # Function to get users for a particular company
-@app.route('/get-shared-users', methods=['GET'])
+@app.route('/get-channel-members', methods=['GET'])
 def get_users():
     user_id = request.args.get('userId')
-    user_ids = get_shared_users(user_id)
+    user_ids = get_channel_members(user_id)
     response = jsonify({"userIds": user_ids})
     response.headers.add('Access-Control-Allow-Origin', '*')
 
     return response
 
 
-# Function to fetch files from Google Drive
-def get_files_from_drive(service):
-    try:
-        q = "mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='application/msword' or mimeType='application/vnd.openxmlformats-officedocument.presentationml.presentation' or mimeType='application/vnd.ms-powerpoint'"
-        results = service.files().list(fields="nextPageToken, files(id, name, webViewLink)", q=q).execute()
-        items = results.get('files', [])
-        return items
-    except Exception as e:
-        logger.info("Failed to fetch files from Google Drive")
-        logger.info(e)
-        return []
+@app.route('/email-confirmation', methods=['POST'])
+def trigger_email_confirmation():
+    data = flask.request.get_json()
+    user_email = data.get('user_email')
+    token = generate_confirmation_token(user_email)
+    confirm_url = url_for('confirm_email', token=token, _external=True)
+    html = render_template('activate.html', confirm_url=confirm_url)
+
+    subject = "Please confirm your email"
+    send_email(user_email, subject, html, mail)
+    data = {
+        'message': f'Confirmation email has been send to {user_email}.'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 
-# Function to fetch Google Drive credentials
-def get_google_drive_credentials(user_id, code):
+@app.route('/confirm-email/<token>')
+def confirm_email(token):
+    user_email = confirm_token(token)
     db = connect_to_mongodb()
-
-    result = fetch_token(db, user_id)
-    if result:
-        logger.info("found token in DB")
-        token = result["token"]
-        refresh_token = result["refresh_token"]
-
+    collection = db['users']
+    user = collection.find_one({"user_email": user_email})
+    if user:
+        collection.update_one({"user_email": user_email}, {"$set": {"is_verified": True}})
+        return render_template('confirmed.html')
     else:
-        logger.info("fetching token from google api")
-        token_result = get_token(code)
-        token = token_result.get("access_token")
-        refresh_token = token_result.get("refresh_token")
-        persist_token(db, user_id, token, refresh_token)
-
-    creds = Credentials(
-        token=token,
-        refresh_token=refresh_token,
-        token_uri="https://www.googleapis.com/oauth2/v3/token",
-        client_id=os.getenv("GOOGLE_CLIENT_ID"),
-        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    )
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-
-    return creds
+        logger.info('User not found or unable to update MongoDB.', 'danger')
+        return render_template('expired.html')
 
 
-# Function to refresh Google Drive credentials
-def refresh_credentials(token_file):
-    flow = InstalledAppFlow.from_client_secrets_file('token/credentials.json', SCOPES)
-    creds = flow.run_local_server(port=0)
-    with open(token_file, 'w') as token:
-        token.write(creds.to_json())
-    return creds
+# Function to delete the file data from vector DB and postgres database
+@app.route('/delete-file', methods=['POST'])
+def delete_file_service():
+    data = flask.request.get_json()
+    file_id = data.get('file_id')
+    user_email = data.get('user_email')
+    channel_name = data.get('channel_name')
+    logger.info(f"File id is being deleted '{file_id}'")
+    delete_file(file_id, user_email, channel_name)
+    data = {
+        'message': 'File successfully deleted'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 
-# Function to connect to MongoDB
-def connect_to_mongodb():
-    try:
-        MONGODB_URI = "mongodb+srv://casperai:Xaw6K5IL9rMbcsVG@cluster0.25foikp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
-        client = MongoClient(MONGODB_URI)
-        db = client['Casperai']
-        logger.info("Connected successfully to MongoDB")
-        return db
-    except Exception as e:
-        logger.info("Failed to connect to MongoDB")
-        logger.info(e)
-
-
-# Function to fetch file information from Google Drive
-def get_file_info(service, file_id):
-    return service.files().get(fileId=file_id, fields='id, name, parents, webViewLink, mimeType').execute()
-
-
-# Function to download and save file from Google Drive
-def download_and_save_file(service, file_info):
-    if file_info['mimeType'] in ['application/pdf',
-                                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                 'application/msword',
-                                 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                                 'application/vnd.ms-powerpoint']:  # Add MIME types for PPT and Word
-        request = service.files().get_media(fileId=file_info['id'])
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while done is False:
-            status, done = downloader.next_chunk()
-
-        # Save the Word document to a temporary file
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_info['name'])
-        with open(file_path, 'wb') as f:
-            f.write(fh.getbuffer())
-
-        # Convert the Word document to PDF
-        pdf_output_path = os.path.splitext(file_path)[0] + '.pdf'
-        if file_info['mimeType'] in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                     'application/msword',
-                                     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                                     'application/vnd.ms-powerpoint']:
-            subprocess.run(['unoconv', '-f', 'pdf', file_path])
-            # Remove the temporary Word file
-            os.remove(file_path)
-        pdf_name = os.path.basename(pdf_output_path)
-        return pdf_name
-
-
-def get_company_id(db, user_id):
-    try:
-        collection = db['users']
-        user = collection.find_one({"userId": user_id})
-        if user:
-            return user.get("companyId")
-        else:
-            return None
-    except Exception as e:
-        logger.info(f'Failed to get company id for user: {user_id}')
-        logger.info(e)
-
-
-# Function to persist document metadata into MongoDB
-def persist_document_metadata(db, file_info, company_id, channel_id, status):
-    try:
-        collection = db['documents']
-        # Check if document already exists
-        existing_document = collection.find_one({'docId': file_info['id']})
-
-        if existing_document:
-            # Update status of existing document
-            collection.update_one({'_id': existing_document['_id']}, {'$set': {'status': status.value}})
-            logger.info(f"Updated status of document: {file_info['id']} to {status.value}")
-        else:
-            # Insert new document if it doesn't exist
-            document = {
-                'docId': file_info['id'],
-                'docName': file_info['name'],
-                'docUrl': file_info['webViewLink'],
-                'companyId': company_id,
-                'channelId': channel_id,
-                'timestamp': datetime.now(),
-                'status': status.value
-            }
-            collection.insert_one(document)
-            logger.info(f"Inserted document: {file_info['id']} with status {status.value}")
-    except Exception as e:
-        logger.info(f'Failed to persist document: {file_info["id"]}')
-        logger.info(e)
-
-
-def get_token(code):
-    try:
-        url = "https://oauth2.googleapis.com/token"
-        params = {
-            "code": code,
-            "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
-            "grant_type": "authorization_code",
-            "redirect_uri": "http://localhost:8080/usable/folders"
-        }
-        response = requests.post(url, params=params)
-        # Check if the request was successful (status code 200)
-        if response.status_code == 200:
-            logger.info("POST request successful!")
-            data = response.json()
-            return data
-        else:
-            logger.info("POST request failed with status code:", response.status_code)
-    except Exception as e:
-        logger.info("An error occurred:", str(e))
-
-
-def fetch_token(db, userId):
-    try:
-        collection = db['user_token']
-
-        # Define a document to be inserted
-        query = {"user_id": userId}
-        projection = {"user_id", "token", "refresh_token"}  # You can specify fields to include or exclude in the result
-        result = collection.find_one(query, projection)
-        if result:
-            logger.info(f'found code for user: {result.get("user_id")}')
-            return result
-        else:
-            logger.info(f'No token found for user: {userId}, persisting token')
-    except Exception as e:
-        logger.info(f'Failed to fetch token for user: {userId}')
-        logger.info(e)
-
-
-def persist_token(db, userId, token, refresh_token):
-    try:
-        collection = db['user_token']
-
-        # Define a document to be inserted
-        query = {"user_id": userId}
-        projection = {"user_id", "token", "refresh_token"}  # You can specify fields to include or exclude in the result
-        result = collection.find_one(query, projection)
-        if result:
-            logger.info(f'found code for user: {result.get("user_id")}')
-        else:
-            logger.info(f'No token found for user: {userId}, persisting token')
-            document = {
-                'user_id': userId,
-                'token': token,
-                'refresh_token': refresh_token
-            }
-            collection.insert_one(document)
-    except Exception as e:
-        logger.info(f'Failed to fetch token for user: {userId}')
-        logger.info(e)
+# TODO: Do we still need this?
+@app.route('/delete-user', methods=['POST'])
+def delete_user_service():
+    data = flask.request.get_json()
+    user_id = data.get('userId')
+    logger.info(f"User id is being deleted '{user_id}'")
+    delete_user(user_id)
+    data = {
+        'message': 'User successfully deleted'
+    }
+    response = jsonify(data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
-from pymongo import MongoClient
-from bson import ObjectId
 from datetime import datetime
+
+from bson import ObjectId
+from pymongo import MongoClient
 
 
 def add_users(db, user_emails, company_id):
@@ -68,12 +69,14 @@ def persist_channel_info(db, channel_name, company_id, admin_email):
     try:
         collection = db['channels']
         existing_document = collection.find_one({'channel_name': channel_name, 'company_id': company_id})
+        users_collection = db['users']
+        user = users_collection.find_one({"user_email": admin_email})
         if not existing_document:
             document = {
                 'channel_name': channel_name,
                 'company_id': company_id,
                 'admin_email': admin_email,
-                'member_ids': [],
+                'member_ids': [str(user['_id'])],
                 'timestamp': datetime.now(),
             }
             insert_result = collection.insert_one(document)

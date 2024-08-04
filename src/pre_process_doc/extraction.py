@@ -13,23 +13,23 @@ from PIL import Image
 from generate_summaries import generate_text_and_table_summaries, generate_img_summaries
 from retriever import create_multi_vector_retriever
 
-
+# TODO: Amit to replace with Adobe
 # Extract elements from PDF
-def extract_pdf_elements(fpath, fname):
+def extract_pdf_elements(file_path, file_name):
     """
     Extract images, tables, and chunk text from a PDF file.
     path: File path, which is used to dump images (.jpg)
     fname: File name
     """
     return partition_pdf(
-        filename=fpath + fname,
+        filename=file_path + file_name,
         extract_images_in_pdf=True,
         infer_table_structure=True,
         chunking_strategy="by_title",
         max_characters=4000,
         new_after_n_chars=3800,
         combine_text_under_n_chars=2000,
-        image_output_dir_path=fpath,
+        image_output_dir_path=file_path,
     )
 
 
@@ -78,34 +78,21 @@ def semantic_chunking_texts(texts):
     return semantic_text_chunks
 
 
-# TODO: Can be removed as we no longer chunk texts this way.
-# Look at semantic_chunking_texts.
-def chunkning_texts(texts):
-    # Optional: Enforce a specific token size for texts
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=4000, chunk_overlap=0
-    )
-    joined_texts = " ".join(texts)
-    texts_4k_token = text_splitter.split_text(joined_texts)
-
-    return texts_4k_token
-
-
 def convert_tables_to_json(tables):
     logger.info(f"Converting tables to json")
     json_tables = [df.to_json(orient='records') for df in tables]
     return json_tables
 
 
-def process_pdf(fpath, fname, index_name, file_id):
+def process_pdf(file_path, file_name, index_name, file_id):
     # File path
-    logger.info(f"In process pdf for file '{fname}'")
+    logger.info(f"In process pdf for file '{file_name}'")
     img_path = "figures/"
     # Get elements
-    raw_pdf_elements = extract_pdf_elements(fpath, fname)
+    raw_pdf_elements = extract_pdf_elements(file_path, file_name)
     # Get text, tables
     texts = extract_texts(raw_pdf_elements)
-    tables = extract_tables(fpath, fname)
+    tables = extract_tables(file_path, file_name)
     images = extract_images(img_path)
     chunked_texts = semantic_chunking_texts(texts)
 
@@ -118,7 +105,7 @@ def process_pdf(fpath, fname, index_name, file_id):
     img_base64_list, image_summaries = generate_img_summaries(img_path)
     json_tables = convert_tables_to_json(tables)
 
-    logger.info(f"PDF extraction complete for file '{fname}'")
+    logger.info(f"PDF extraction complete for file '{file_name}'")
     # Create retriever
     retriever_multi_vector_img = create_multi_vector_retriever(
         text_summaries,
