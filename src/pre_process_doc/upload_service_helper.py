@@ -149,13 +149,17 @@ def confirm_token(token, expiration=3600):
     return email
 
 
-def get_channel_members(channel_id):
+def get_channel_members(user_email, channel_name):
     db = connect_to_mongodb()
     channels_collection = db['channels']
     users_collection = db['users']
-    channel = channels_collection.find_one({"_id": ObjectId(channel_id)})
+    user = users_collection.find_one({"user_email": user_email})
+    channel = channels_collection.find_one({
+        'channel_name': channel_name,
+        'company_id': user['company_id']
+    })
     # Convert member_ids to ObjectId and store in a list
-    member_ids = [ObjectId(member_id) for member_id in channel['member_ids']]
+    member_ids = channel['member_ids']
 
     # Initialize an array to store user emails
     user_emails = []

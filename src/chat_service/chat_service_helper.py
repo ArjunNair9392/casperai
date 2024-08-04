@@ -12,7 +12,6 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.retrievers import Document
 # from logging_config import logger
 from PIL import Image
-from pinecone import PodSpec, Pinecone
 from pymongo import MongoClient
 
 # Local Python files

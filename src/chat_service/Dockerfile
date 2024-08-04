@@ -13,7 +13,7 @@ COPY chat_service.py ./chat_service.py
 COPY chat_service_helper.py ./chat_service_helper.py
 COPY docstore/ ./docstore/
 COPY retriever/ ./retriever/
-RUN pip install -r requirements_for_chat.txt
+RUN pip install --no-cache-dir -r requirements_for_chat.txt
 
 
 EXPOSE 8080

@@ -142,8 +142,9 @@ def get_file_status():
 # Function to get users for a particular company
 @app.route('/get-channel-members', methods=['GET'])
 def get_users():
-    user_id = request.args.get('userId')
-    user_ids = get_channel_members(user_id)
+    channel_name = request.args.get('channel_name')
+    user_email = request.args.get('channel_name')
+    user_ids = get_channel_members(user_email, channel_name)
     response = jsonify({"userIds": user_ids})
     response.headers.add('Access-Control-Allow-Origin', '*')
 
