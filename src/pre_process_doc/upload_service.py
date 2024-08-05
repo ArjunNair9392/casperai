@@ -80,7 +80,7 @@ def process_files():
             logger.info(f"File '{file_info['name']}' processed successfully")
             persist_document_metadata(db, file_info, channel_id, DocumentStatus.SUCCESS)
             logger.info(f"Metadata for file '{file_info['name']}' persisted successfully")
-            send_notification(user_email, mail, channel_id)
+            send_notification(user_email, mail, channel_name)
         except Exception as e:
             logger.info(f"Error processing file: {file_info['name']}")
             logger.info(f"Error: {e}")
@@ -143,9 +143,9 @@ def get_file_status():
 @app.route('/get-channel-members', methods=['GET'])
 def get_users():
     channel_name = request.args.get('channel_name')
-    user_email = request.args.get('channel_name')
-    user_ids = get_channel_members(user_email, channel_name)
-    response = jsonify({"userIds": user_ids})
+    user_email = request.args.get('user_email')
+    member_emails = get_channel_members(user_email, channel_name)
+    response = jsonify({"member_emails": member_emails})
     response.headers.add('Access-Control-Allow-Origin', '*')
 
     return response

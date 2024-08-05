@@ -12,9 +12,8 @@ from pinecone import Pinecone, ServerlessSpec
 from docstore.sqlalchemy_docstore import SQLAlchemyDocStore
 
 
-def get_vectorestore(indexName):
+def get_vectorestore(index_name):
     pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    index_name = indexName
     indexes = pc.list_indexes().names()
     logger.info("Indexes: ")
     logger.info(indexes)

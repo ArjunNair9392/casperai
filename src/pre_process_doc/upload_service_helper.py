@@ -166,7 +166,7 @@ def get_channel_members(user_email, channel_name):
 
     # Loop through member_ids and find the corresponding user
     for member_id in member_ids:
-        user = users_collection.find_one({"_id": member_id})
+        user = users_collection.find_one({"_id": ObjectId(member_id)})
         if user and 'user_email' in user:
             user_emails.append(user['user_email'])
 
@@ -402,9 +402,9 @@ def send_email(to, subject, template, mail):
     mail.send(msg)
 
 
-def send_notification(user_email, mail, channel_id):
+def send_notification(user_email, mail, channel_name):
     chat_link = "/"
-    user_emails = get_channel_members(channel_id)
+    user_emails = get_channel_members(user_email, channel_name)
 
     for user_id in user_emails:
         # Generate the email content
