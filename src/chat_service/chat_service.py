@@ -103,7 +103,7 @@ def handle_channel_creation(event, say):
 
 # Event listener for member joining a channel
 @slack_app.event("message")
-def handle_member_joined_channel(body, logger):
+def handle_member_joined_channel(body, log):
     user_id = body['event']['user']
     channel_id = body['event']['channel']
     channel_sub_type = body['event']['subtype']
@@ -160,7 +160,7 @@ def call_chat_service(user_id, channel_id, user_email, channel_name, query):
 
 
 @app.route('/ask-casper', methods=['POST'])
-def test_call():
+def ask_casper():
     slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
     data = request.form
     user_id = data.get('user_id')

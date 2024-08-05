@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.retrievers import Document
+from pinecone import Pinecone
 # from logging_config import logger
 from PIL import Image
 from pymongo import MongoClient
@@ -188,12 +189,15 @@ def get_channel_id_by_name_and_company(db, channel_name, company_id):
 
 
 def get_vectorestore(index_name):
-    embed = OpenAIEmbeddings(
-        model='text-embedding-3-small',
-        openai_api_key=os.getenv("OPENAI_API_KEY")
-    )
-    # Instantiate Pinecone vectorstore
-    vectorstore = PineconeVectorStore(index_name=index_name, embedding=embed)
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    index = pc.Index(index_name)
+    if index:
+        embed = OpenAIEmbeddings(
+            model='text-embedding-3-small',
+            openai_api_key=os.getenv("OPENAI_API_KEY")
+        )
+        # Instantiate Pinecone vectorstore
+        vectorstore = PineconeVectorStore(index_name=index_name, embedding=embed)
 
     return vectorstore
 
@@ -223,13 +227,8 @@ def connect_to_mongodb():
                    "&appName=Cluster0")
     client = MongoClient(MONGODB_URI)
     db = client['Casperai']
-    # logger.info("Connected successfully to MongoDB")
     return db
 
-
-# except Exception as e:
-# logger.info("Failed to connect to MongoDB")
-# logger.info(e)
 
 def remove_ask_prefix(channel_name):
     if channel_name.startswith("ask_"):
@@ -254,7 +253,7 @@ def chat(user_email, channel_name, query):
     full_query = f"{question} {history}"
     # Directly call the vectorstore and get all relevant documents. similarity_search
     # called internally by get_relevant_documents.
-    relevant_documents = vectorstore.similarity_search(full_query, k=3)
+    relevant_documents = vectorstore.similarity_search(full_query, k=5)
     # Get file_id for each document
     # TODO: Will be used to cite source.
     for doc in relevant_documents:
