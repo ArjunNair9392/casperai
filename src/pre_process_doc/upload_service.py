@@ -1,5 +1,4 @@
 import os
-import os
 from enum import Enum
 
 import flask
@@ -11,7 +10,7 @@ from googleapiclient.discovery import build
 # Local Python files
 from extraction import process_pdf
 from logging_config import logger
-from upload_service_helper import delete_user, delete_file, connect_to_mongodb, get_company_id, \
+from upload_service_helper import delete_file, connect_to_mongodb, get_company_id, \
     generate_confirmation_token, confirm_token, get_channel_members, get_channel_id, get_documents_by_channel, \
     get_google_drive_credentials, get_file_info, download_and_save_file, persist_document_metadata, \
     get_files_from_drive, send_notification, send_email
@@ -111,34 +110,6 @@ def list_files():
     return response
 
 
-@app.route('/list-files-from-channel', methods=['GET'])
-def get_file_status():
-    try:
-        user_email = request.args.get('user_email')
-        channel_name = request.args.get('channel_name')
-        db = connect_to_mongodb()
-        company_id = get_company_id(db, user_email)
-        channel_id = get_channel_id(db, channel_name, company_id)
-        logger.info(
-            f"Fetching file statuses for user: '{user_email}', company: '{company_id}' and channel: '{channel_id}'")
-        data = get_documents_by_channel(db, channel_id)
-        jsonData = jsonify(data)
-        response = make_response(jsonData)
-        response.headers.add('Content-Type', 'application/json')
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
-    except Exception as e:
-        # Handle any exceptions that occur in the overall process
-        logger.info(f"An error occurred in the file processing operation: {str(e)}")
-        # Optionally, you can log the error or take other appropriate actions
-        data = {
-            'error': 'An error occurred during file processing'
-        }
-        response = jsonify(data)
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response, 500
-
-
 # Function to get users for a particular company
 @app.route('/get-channel-members', methods=['GET'])
 def get_users():
@@ -194,21 +165,6 @@ def delete_file_service():
     delete_file(file_id, user_email, channel_name)
     data = {
         'message': 'File successfully deleted'
-    }
-    response = jsonify(data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response, 200
-
-
-# TODO: Do we still need this?
-@app.route('/delete-user', methods=['POST'])
-def delete_user_service():
-    data = flask.request.get_json()
-    user_id = data.get('userId')
-    logger.info(f"User id is being deleted '{user_id}'")
-    delete_user(user_id)
-    data = {
-        'message': 'User successfully deleted'
     }
     response = jsonify(data)
     response.headers.add('Access-Control-Allow-Origin', '*')

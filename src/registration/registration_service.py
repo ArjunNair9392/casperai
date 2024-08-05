@@ -1,9 +1,9 @@
-from flask import Flask, request, jsonify, abort
-from flask_cors import CORS
 from bson import ObjectId
+from flask import Flask, request, jsonify, abort, make_response
+from flask_cors import CORS
 
 from registration_service_helper import connect_to_mongodb, persist_company_info, add_users, get_company_for_user, \
-    persist_channel_info, list_channel_names
+    persist_channel_info, list_channel_names, get_documents_by_channel
 
 app = Flask(__name__)
 CORS(app)
@@ -23,8 +23,8 @@ def register_company():
     phone_number = data.get('phone_number')
     admin_email = data.get('admin_email')
     db = connect_to_mongodb()
-    persist_company_info(db, name, address, city, state, phone_number, admin_email)
-    add_users(db, [admin_email], name)
+    company_id = persist_company_info(db, name, address, city, state, phone_number, admin_email)
+    add_users(db, admin_email, company_id)
 
     data = {
         'status': 'success',
@@ -87,41 +87,48 @@ def get_channels_for_user():
         abort(404)
 
 
-# TODO: Ask Amit if this is still needed
-@app.route('/get-admin-info', methods=['GET'])
+@app.route('/get-user', methods=['GET'])
 def get_company():
-    admin_email = request.args.get('adminEmail')
+    user_email = request.args.get('user_email')
     db = connect_to_mongodb()
-    result = get_company_for_user(db, admin_email)
-    if result:
-        name = result.get("name")
-        admin_email = result.get("admin_email")
+    users_collection = db['users']
+    user = users_collection.find_one({"user_email": user_email})
+    if user:
+        response = jsonify(user)
+    else:
+        response = jsonify("FAILURE")
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response
+
+
+@app.route('/list-files-from-channel', methods=['GET'])
+def list_files_for_channel():
+    try:
+        user_email = request.args.get('user_email')
+        channel_name = request.args.get('channel_name')
+        db = connect_to_mongodb()
+        users_collection = db['users']
+        user = users_collection.find_one({"user_email": user_email})
+        company_id = user['company_id']
+        channels_collection = db['channels']
+        channel_id = channels_collection.find_one({
+            'channel_name': channel_name,
+            'company_id': company_id
+        }, {'_id': 1})  # Only retrieve the _id field
+        data = get_documents_by_channel(db, str(channel_id))
+        jsonData = jsonify(data)
+        response = make_response(jsonData)
+        response.headers.add('Content-Type', 'application/json')
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+    except Exception as e:
+        # Optionally, you can log the error or take other appropriate actions
         data = {
-            "company": name,
-            "admin_email": admin_email
+            'error': 'An error occurred during file processing'
         }
         response = jsonify(data)
         response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
-    else:
-        abort(404)
-
-
-@app.route('/add-users', methods=['POST'])
-def add_users_to_company():
-    # Get list of user email IDs from request JSON
-    data = request.get_json()
-    user_emails = data.get('user_emails', [])
-    company = data.get('company_id')
-
-    db = connect_to_mongodb()
-    add_users(db, user_emails, company)
-    data = {
-        'status': 'SUCCESS',
-    }
-    response = jsonify(data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    return response, 200
+        return response, 500
 
 
 if __name__ == '__main__':

@@ -63,6 +63,7 @@ def persist_company_info(db, name, address, city, state, phone_number, admin_ema
     except Exception as e:
         print(f'Failed to insert company info for : {name}')
         print(e)
+    return str(insert_result['_id'])
 
 
 def persist_channel_info(db, channel_name, company_id, admin_email):
@@ -121,3 +122,16 @@ def connect_to_mongodb():
     except Exception as e:
         print("Failed to connect to MongoDB")
         print(e)
+
+
+def get_documents_by_channel(db, channel_id):
+    try:
+        collection = db['documents']
+        document_filter = {'channel_id': channel_id}
+        projection = {'doc_id': 1, 'doc_name': 1, 'status': 1, '_id': 0,
+                      'doc_url': 1}
+        documents = collection.find(document_filter, projection)
+        document_list = list(documents)
+        return document_list  # Convert document list to JSON
+    except Exception as e:
+        return '[]'  # Return empty JSON array in case of error
