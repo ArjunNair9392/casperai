@@ -177,7 +177,6 @@ def ask_casper():
         "query": query
     }
     chat_url = 'https://chatservice-2imgap5w2q-uc.a.run.app/chat'
-    chat_url = 'http://192.168.1.69:8080/chat'
     session = FuturesSession()
     session.post(chat_url, json=payload)
 
