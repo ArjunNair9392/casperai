@@ -10,9 +10,11 @@ from flask import request, Flask, jsonify, Response
 from slack_bolt import App
 from slack_sdk import WebClient
 from slack_bolt.adapter.flask import SlackRequestHandler
+from requests_futures.sessions import FuturesSession
 
 # Local Python files
-from chat_service_helper import connect_to_mongodb, chat, remove_ask_prefix
+from chat_service_helper import connect_to_mongodb, remove_ask_prefix, fetch_index_name, multi_modal_rag_chain, \
+    get_retriever, get_vectorestore
 
 app = Flask(__name__)
 
@@ -147,25 +149,13 @@ def handle_member_joined_channel(body, log):
         )
 
 
-def call_chat_service(user_id, channel_id, user_email, channel_name, query):
-    res = chat(user_email, channel_name, query)
-
-    # Send the final result to the user
-    slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
-    slack_response = slack_client.chat_postEphemeral(
-        channel=channel_id,
-        text=res,
-        user=user_id
-    )
-
-
 @app.route('/ask-casper', methods=['POST'])
 def ask_casper():
     slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
     data = request.form
-    user_id = data.get('user_id')
-    channel_id = data.get('channel_id')
-    channel_name = data.get('channel_name')
+    slack_user_id = data.get('user_id')
+    slack_channel_id = data.get('channel_id')
+    slack_channel_name = data.get('channel_name')
     text = data.get('text')
     query = [{"role": "system",
               "content": "Your name is Casper. An incredibly intelligent, knowledgeable and quick-thinking AI, "
@@ -174,15 +164,65 @@ def ask_casper():
                          "history associated with it so please use that."},
              {"role": "user", "content": text}]
 
-    response_message = "Analyzing..."
-
-    user_info = slack_client.users_info(user=user_id)
+    user_info = slack_client.users_info(user=slack_user_id)
     user_email = user_info['user']['profile']['email']
-    channel_name = remove_ask_prefix(channel_name)
-    # Start the long-running task in a separate thread
-    thread = threading.Thread(target=call_chat_service,
-                              args=(data["user_id"], channel_id, user_email, channel_name, query))
-    thread.start()
+    user_name = user_info['user']['name']
+    channel_name = remove_ask_prefix(slack_channel_name)
+
+    payload = {
+        "channel_id": slack_channel_id,
+        "user_id": slack_user_id,
+        "user_email": user_email,
+        "channel_name": channel_name,
+        "query": query
+    }
+    chat_url = 'https://chatservice-2imgap5w2q-uc.a.run.app/chat'
+    chat_url = 'http://192.168.1.69:8080/chat'
+    session = FuturesSession()
+    session.post(chat_url, json=payload)
+
+    response_message = f"{user_name}: {text}"
+    slack_response = slack_client.chat_postEphemeral(
+        channel=slack_channel_id,
+        text=response_message,
+        user=slack_user_id
+    )
+
+    return Response(), 200
+
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    data = flask.request.get_json()
+    user_id = data.get('user_id')
+    channel_id = data.get('channel_id')
+    user_email = data.get('user_email')
+    channel_name = data.get('channel_name')
+    query = data.get('query')
+    previous_message_timestamp = data.get("previous_message_timestamp")
+    index_name = fetch_index_name(user_email, channel_name)
+    retriever = get_retriever(index_name)
+    vectorstore = get_vectorestore(index_name)
+    last_item = query[-1]
+    # Extract and remove the last element with role="user" as question
+    if last_item['role'] == 'user':
+        question = last_item['content']
+        query.pop()  # Remove the last item from the list
+    else:
+        question = None
+    history = query
+    # Combine the current question with the history to provide context
+    full_query = f"{question} {history}"
+    history_aware_retriever = lambda query: (retriever.get_relevant_documents(full_query, limit=5), history)
+    chain_multimodal_rag = multi_modal_rag_chain(history_aware_retriever)
+    response = chain_multimodal_rag.invoke({
+        "question": question,
+        "history": history
+    })
+
+    # Send the final result to the user
+    slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
+    response_message = f"Casper: {response}"
 
     slack_response = slack_client.chat_postEphemeral(
         channel=channel_id,
