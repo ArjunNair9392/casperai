@@ -198,7 +198,6 @@ def chat():
     user_email = data.get('user_email')
     channel_name = data.get('channel_name')
     query = data.get('query')
-    previous_message_timestamp = data.get("previous_message_timestamp")
     index_name = fetch_index_name(user_email, channel_name)
     retriever = get_retriever(index_name)
     vectorstore = get_vectorestore(index_name)
