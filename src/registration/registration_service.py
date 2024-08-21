@@ -24,10 +24,10 @@ def register_company():
     admin_email = data.get('admin_email')
     db = connect_to_mongodb()
     company_id = persist_company_info(db, name, address, city, state, phone_number, admin_email)
-    add_users(db, admin_email, company_id)
+    add_users(db, [admin_email], company_id)
 
     data = {
-        'status': 'success',
+        'success': True,
         'message': 'Company registered successfully'
     }
     response = jsonify(data)
@@ -58,20 +58,20 @@ def add_channel():
 
     if generated_id:
         response_data = {
-            'status': 'success',
+            'success': True,
             'message': 'Channel added successfully',
             'id': str(generated_id)
         }
     else:
         response_data = {
-            'status': 'failure',
+            'success': False,
             'message': 'Failed to add channel'
         }
 
     response = jsonify(response_data)
     response.headers.add('Access-Control-Allow-Origin', '*')
 
-    return response, 200 if generated_id else 500
+    return response, 200
 
 
 @app.route('/list-channels-for-user', methods=['GET'])
@@ -80,25 +80,31 @@ def get_channels_for_user():
     db = connect_to_mongodb()
     channel_names = list_channel_names(db, user_email)
     if channel_names:
-        response = jsonify({"channel_names": channel_names})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
+        response = jsonify({"success": True, "channel_names": channel_names})
     else:
-        abort(404)
+        response = jsonify({"success": False, "channel_names": []})
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 
 @app.route('/get-user', methods=['GET'])
-def get_company():
+def get_user():
     user_email = request.args.get('user_email')
     db = connect_to_mongodb()
     users_collection = db['users']
     user = users_collection.find_one({"user_email": user_email})
     if user:
-        response = jsonify(user)
+        response = jsonify({
+            "success": True,
+            "user_id": str(user['_id']),
+            "user_email": user['user_email'],
+            "company_id": user['company_id'],
+            "is_verified": user['is_verified']
+        })
     else:
-        response = jsonify("FAILURE")
+        response = jsonify({"success": False, "message": "User not found"})
     response.headers.add('Access-Control-Allow-Origin', '*')
-    return response
+    return response, 200
 
 
 @app.route('/list-files-from-channel', methods=['GET'])
@@ -116,11 +122,11 @@ def list_files_for_channel():
             'company_id': company_id
         }, {'_id': 1})  # Only retrieve the _id field
         data = get_documents_by_channel(db, str(channel_id))
-        jsonData = jsonify(data)
+        jsonData = jsonify({"success": True, "files": data})
         response = make_response(jsonData)
         response.headers.add('Content-Type', 'application/json')
         response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
+        return response, 200
     except Exception as e:
         # Optionally, you can log the error or take other appropriate actions
         data = {

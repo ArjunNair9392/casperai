@@ -16,7 +16,6 @@ def add_users(db, user_emails, company_id):
                     'slack_app_opened': False
                 }
                 insert_result = collection.insert_one(document)
-                print(f'Inserted user : {user_email}')
             else:
                 print(f'User already exists: {user_email}')
     except Exception as e:
@@ -60,10 +59,11 @@ def persist_company_info(db, name, address, city, state, phone_number, admin_ema
         }
         insert_result = collection.insert_one(document)
         print(f'Inserted company info for : {name}')
+        company_id = str(insert_result.inserted_id)
     except Exception as e:
         print(f'Failed to insert company info for : {name}')
         print(e)
-    return str(insert_result['_id'])
+    return company_id
 
 
 def persist_channel_info(db, channel_name, company_id, admin_email):
