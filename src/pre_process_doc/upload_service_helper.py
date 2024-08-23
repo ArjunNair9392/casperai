@@ -335,7 +335,7 @@ def get_token(code):
             "client_id": os.getenv("GOOGLE_CLIENT_ID"),
             "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
             "grant_type": "authorization_code",
-            "redirect_uri": "http://localhost:8080/usable/folders"
+            "redirect_uri": "http://localhost:8080/usable/folder_path"
         }
         response = requests.post(url, params=params)
         # Check if the request was successful (status code 200)
