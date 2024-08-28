@@ -23,16 +23,30 @@ def register_company():
     phone_number = data.get('phone_number')
     admin_email = data.get('admin_email')
     db = connect_to_mongodb()
-    company_id = persist_company_info(db, name, address, city, state, phone_number, admin_email)
-    add_users(db, [admin_email], company_id)
+    collection = db['companies']
+    # Check if a document with the same name and admin_email already exists
+    existing_document = collection.find_one({'name': name, 'admin_email': admin_email})
+    if existing_document is None:
+        company_id = persist_company_info(db, name, address, city, state, phone_number, admin_email)
+        add_users(db, [admin_email], company_id)
 
-    data = {
-        'success': True,
-        'message': 'Company registered successfully'
-    }
-    response = jsonify(data)
-    response.headers.add('Access-Control-Allow-Origin', '*')
-
+        data = {
+            'success': True,
+            'message': 'Company registered successfully',
+            'company_id': company_id
+        }
+        response = jsonify(data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+    else:
+        # Document with the same name and admin_email already exists
+        print(f'Company info for {name} with admin_email {admin_email} already exists.')
+        company_id = str(existing_document['_id'])
+        data = {
+            'success': False,
+            'message': 'Company was already registered with same name and admin email',
+            'company_id': company_id
+        }
+        response = jsonify(data)
     return response, 200
 
 
@@ -52,25 +66,33 @@ def add_channel():
 
     if not company_id or not channel_name or not admin_email:
         return jsonify({"error": "company_id, channel_name, and admin_email are required"}), 400
+    collection = db['channels']
+    existing_document = collection.find_one({'channel_name': channel_name, 'admin_email': admin_email, 'company_id': company_id})
+    if existing_document is None:
+        generated_id = persist_channel_info(db, channel_name, company_id, admin_email)
 
-    db = connect_to_mongodb()
-    generated_id = persist_channel_info(db, channel_name, company_id, admin_email)
+        if generated_id:
+            response_data = {
+                'success': True,
+                'message': 'Channel added successfully',
+                'id': str(generated_id)
+            }
+        else:
+            response_data = {
+                'success': False,
+                'message': 'Failed to add channel'
+            }
 
-    if generated_id:
-        response_data = {
-            'success': True,
-            'message': 'Channel added successfully',
-            'id': str(generated_id)
-        }
+        response = jsonify(response_data)
     else:
         response_data = {
             'success': False,
-            'message': 'Failed to add channel'
+            'message': f'Channel with the same name exists under this company! Company ID: {company_id}',
+            'id': str(existing_document['_id'])
         }
+        response = jsonify(response_data)
 
-    response = jsonify(response_data)
     response.headers.add('Access-Control-Allow-Origin', '*')
-
     return response, 200
 
 
@@ -112,16 +134,51 @@ def list_files_for_channel():
     try:
         user_email = request.args.get('user_email')
         channel_name = request.args.get('channel_name')
+
         db = connect_to_mongodb()
         users_collection = db['users']
+
+        # Check if the user exists
         user = users_collection.find_one({"user_email": user_email})
-        company_id = user['company_id']
+        if not user:
+            data = {
+                'success': False,
+                'message': 'User not found with the given email.'
+            }
+            response = jsonify(data)
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 200
+
+        # Check if the company_id is present in the user's document
+        company_id = user.get('company_id')
+        if not company_id:
+            data = {
+                'success': False,
+                'message': 'Company ID not found for the user.'
+            }
+            response = jsonify(data)
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 200
+
         channels_collection = db['channels']
-        channel_id = channels_collection.find_one({
+
+        # Check if the channel exists for the given company_id
+        channel = channels_collection.find_one({
             'channel_name': channel_name,
             'company_id': company_id
         }, {'_id': 1})  # Only retrieve the _id field
-        data = get_documents_by_channel(db, str(channel_id))
+
+        if not channel:
+            data = {
+                'success': False,
+                'message': 'Wrong channel name for the given company.'
+            }
+            response = jsonify(data)
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 200
+
+        # If everything is valid, get the documents by channel
+        data = get_documents_by_channel(db, str(channel['_id']))
         jsonData = jsonify({"success": True, "files": data})
         response = make_response(jsonData)
         response.headers.add('Content-Type', 'application/json')
@@ -138,4 +195,4 @@ def list_files_for_channel():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=3000)

@@ -43,64 +43,96 @@ def handle_channel_creation(event, say):
     slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
     slack_user_client = WebClient(token=os.getenv("SLACK_USER_TOKEN"))
 
-    user_info_response = slack_bot_client.users_info(user=user_id)
-    # Check if the API call was successful
-    if user_info_response["ok"]:
+    try:
+        # Get user info using the bot token
+        user_info_response = slack_bot_client.users_info(user=user_id)
+
+        # Check if the API call was successful
+        if not user_info_response["ok"]:
+            raise Exception("Failed to fetch user info")
+
         user_info = user_info_response["user"]
         user_email = user_info["profile"]["email"]
 
-    db = connect_to_mongodb()
+        db = connect_to_mongodb()
 
-    users_collection = db['users']
-    user = users_collection.find_one({"user_email": user_email})
-    company_id = user['company_id']
-    channels_collection = db['channels']
-    channels = channels_collection.find({"company_id": company_id})
-    channels = list(channels)
+        # Fetch user details from the database
+        users_collection = db['users']
+        user = users_collection.find_one({"user_email": user_email})
 
-    if not user['slack_app_opened']:
-        welcome_message = f"We have created {len(channels)} for you!"
-        slack_bot_client.chat_postEphemeral(channel=user_id, text=welcome_message, user=user_id)
-        result = users_collection.update_one(
-            {"user_email": user_email},
-            {"$set": {"slack_app_opened": True}}
-        )
-    try:
+        # Handle case where the user is not found in the database
+        if not user:
+            print(f"User with email {user_email} not found in the database.")
+            return
+
+        company_id = user.get('company_id')
+
+        # Handle case where company_id is not found
+        if not company_id:
+            print(f"Company ID not found for user {user_email}.")
+            return
+
+        channels_collection = db['channels']
+        channels = list(channels_collection.find({"company_id": company_id}))
+
+        if not user.get('slack_app_opened'):
+            welcome_message = f"We have created {len(channels)} channels for you!"
+            slack_bot_client.chat_postEphemeral(channel=user_id, text=welcome_message, user=user_id)
+            users_collection.update_one(
+                {"user_email": user_email},
+                {"$set": {"slack_app_opened": True}}
+            )
+
         if channels:
             for channel in channels:
-                if channel['slack_channel_id'] == "":
-                    # Create a private channel
-                    channel_name = f"ask_{channel['channel_name'].replace(' ', '_').lower()}"
-                    response = slack_user_client.conversations_create(
-                        name=channel_name,
-                        is_private=True
-                    )
+                if channel.get('slack_channel_id') == "":
+                    try:
+                        # Create a private channel
+                        channel_name = f"ask_{channel['channel_name'].replace(' ', '_').lower()}"
+                        response = slack_user_client.conversations_create(
+                            name=channel_name,
+                            is_private=True
+                        )
 
-                    slack_channel_id = response["channel"]["id"]
+                        slack_channel_id = response["channel"]["id"]
 
-                    # Get the bot user ID
-                    auth_response = slack_bot_client.auth_test()
-                    bot_user_id = auth_response['user_id']
+                        # Get the bot user ID
+                        auth_response = slack_bot_client.auth_test()
+                        bot_user_id = auth_response['user_id']
 
-                    # Invite the bot to the private channel
-                    invite_response = slack_user_client.conversations_invite(
-                        channel=slack_channel_id,
-                        users=bot_user_id
-                    )
+                        # Invite the bot to the private channel
+                        slack_user_client.conversations_invite(
+                            channel=slack_channel_id,
+                            users=bot_user_id
+                        )
+                        channel_info = slack_user_client.conversations_members(channel=slack_channel_id)
+                        if user_id not in channel_info["members"]:
+                            # Invite the user to the private channel if not already a member
+                            slack_user_client.conversations_invite(
+                                channel=slack_channel_id,
+                                users=user_id
+                            )
+                        else:
+                            print(f"User {user_email} is already a member of the channel {channel_name}.")
 
-                    result = channels_collection.update_one(
-                        {"_id": channel['_id']},
-                        {"$set": {"slack_channel_id": slack_channel_id}}
-                    )
+                        # Update the channel document with the Slack channel ID
+                        channels_collection.update_one(
+                            {"_id": channel['_id']},
+                            {"$set": {"slack_channel_id": slack_channel_id}}
+                        )
 
-                    # Send a welcome message in the channel
-                    welcome_message = "Welcome to our Slack workspace! We are excited to have you here."
-                    slack_user_client.chat_postEphemeral(channel=slack_channel_id, text=welcome_message, user=user_id)
-    except slack.errors.SlackApiError as e:
-        if 'channel_already_exists' in str(e):
-            print("Private channel already exists")
-        else:
-            print(f"Error creating channel: {e}")
+                        # Send a welcome message in the channel
+                        welcome_message = "Welcome to our Slack workspace! We are excited to have you here."
+                        slack_user_client.chat_postEphemeral(channel=slack_channel_id, text=welcome_message,
+                                                             user=user_id)
+
+                    except slack.errors.SlackApiError as e:
+                        if 'channel_already_exists' in str(e):
+                            print("Private channel already exists")
+                        else:
+                            print(f"Error creating channel: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 # Event listener for member joining a channel
@@ -133,7 +165,7 @@ def handle_member_joined_channel(body, log):
             "user_email": user_email,
             "company_id": channel['company_id'],
             "is_verified": False,
-            "slack_app_opened": False
+            "slack_app_opened": True
         }
 
         # Insert the new user document into the user collection
