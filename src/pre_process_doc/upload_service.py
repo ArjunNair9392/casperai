@@ -98,9 +98,8 @@ def process_files():
 @app.route('/list-files-from-gdrive', methods=['GET'])
 def list_files():
     user_email = request.args.get('user_email')
-    code = request.args.get('code')
     logger.info(f"User id we are pulling the file for for file is '{user_email}'")
-    creds = get_google_drive_credentials(user_email, code)
+    creds = get_google_drive_credentials(user_email)
     service = build('drive', 'v3', credentials=creds)
     files = get_files_from_drive(service)
     logger.info("Files retrieved successfully from Google Drive")

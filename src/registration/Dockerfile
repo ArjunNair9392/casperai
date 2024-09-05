@@ -5,6 +5,7 @@ WORKDIR /app
 COPY ./requirements.txt ./requirements.txt
 COPY registration_service_helper.py ./registration_service_helper.py
 COPY registration_service.py ./registration_service.py
+COPY logging_config.py ./logging_config.py
 RUN pip install -r requirements.txt
 
 

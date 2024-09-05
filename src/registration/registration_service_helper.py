@@ -1,7 +1,15 @@
+import os
+import requests
+
 from datetime import datetime
 
 from bson import ObjectId
 from pymongo import MongoClient
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.http import MediaIoBaseDownload
+from logging_config import logger
 
 
 def add_users(db, user_emails, company_id):
@@ -135,3 +143,70 @@ def get_documents_by_channel(db, channel_id):
         return document_list  # Convert document list to JSON
     except Exception as e:
         return '[]'  # Return empty JSON array in case of error
+
+
+def get_token(code):
+    try:
+        url = "https://oauth2.googleapis.com/token"
+        logger.info(f'code: {code}')
+        logger.info(f'client_id: {os.getenv("GOOGLE_CLIENT_ID")}')
+        logger.info(f'client_secret: {os.getenv("GOOGLE_CLIENT_SECRET")}')
+        params = {
+            "code": code,
+            "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+            "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+            "grant_type": "authorization_code",
+            "redirect_uri": "http://localhost:8080/usable/folder_path"
+        }
+        response = requests.post(url, params=params)
+        # Check if the request was successful (status code 200)
+        if response.status_code == 200:
+            logger.info("POST request successful!")
+            data = response.json()
+            return data
+        else:
+            logger.info("POST request failed with status code:", response.status_code)
+    except Exception as e:
+        logger.info("An error occurred:", str(e))
+        raise e
+
+def persist_token(db, user_email, token, refresh_token):
+    try:
+        collection = db['user_token']
+
+        # Define a document to be inserted
+        query = {"user_email": user_email}
+        projection = {"user_email", "token",
+                      "refresh_token"}  # You can specify fields to include or exclude in the result
+        result = collection.find_one(query, projection)
+        if result:
+            logger.info(f'found code for user: {result.get("user_email")}')
+        else:
+            logger.info(f'No token found for user: {user_email}, persisting token')
+            document = {
+                'user_email': user_email,
+                'token': token,
+                'refresh_token': refresh_token
+            }
+            collection.insert_one(document)
+    except Exception as e:
+        logger.info(f'Failed to fetch token for user: {user_email}')
+        logger.info(e)
+
+def fetch_token(db, user_email):
+    try:
+        collection = db['user_token']
+
+        # Define a document to be inserted
+        query = {"user_email": user_email}
+        projection = {"user_email", "token",
+                      "refresh_token"}  # You can specify fields to include or exclude in the result
+        result = collection.find_one(query, projection)
+        if result:
+            logger.info(f'found code for user: {result.get("user_email")}')
+            return result
+        else:
+            logger.info(f'No token found for user: {user_email}, persisting token')
+    except Exception as e:
+        logger.info(f'Failed to fetch token for user: {user_email}')
+        logger.info(e)

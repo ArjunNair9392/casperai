@@ -2,8 +2,9 @@ from bson import ObjectId
 from flask import Flask, request, jsonify, abort, make_response
 from flask_cors import CORS
 
+from logging_config import logger
 from registration_service_helper import connect_to_mongodb, persist_company_info, add_users, get_company_for_user, \
-    persist_channel_info, list_channel_names, get_documents_by_channel
+    persist_channel_info, list_channel_names, get_documents_by_channel, get_token, persist_token, fetch_token
 
 app = Flask(__name__)
 CORS(app)
@@ -115,13 +116,18 @@ def get_user():
     db = connect_to_mongodb()
     users_collection = db['users']
     user = users_collection.find_one({"user_email": user_email})
+    token_result = fetch_token(db, user_email)
+    does_token_exist = False
+    if token_result:
+        does_token_exist = True
     if user:
         response = jsonify({
             "success": True,
             "user_id": str(user['_id']),
             "user_email": user['user_email'],
             "company_id": user['company_id'],
-            "is_verified": user['is_verified']
+            "is_verified": user['is_verified'],
+            "does_token_exist": does_token_exist
         })
     else:
         response = jsonify({"success": False, "message": "User not found"})
@@ -193,6 +199,36 @@ def list_files_for_channel():
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
 
+@app.route('/connect-gdrive', methods=['POST'])
+def connect_gdrive():
+    # Get data from request
+    data = request.get_json()
+    # Extract parameters
+    user_email = data.get('user_email')
+    code = data.get('code')
+    db = connect_to_mongodb()
+    try:
+        logger.info(f'fetching token from google api for user: {user_email}')
+        token_result = get_token(code)
+        token = token_result.get("access_token")
+        refresh_token = token_result.get("refresh_token")
+        persist_token(db, user_email, token, refresh_token)
+        response_data = {
+            'success': True,
+            'message': 'connected to google drive successfully'
+        }
+    except Exception as e:
+        logger.info(f'Failed to fetch token for user: {user_email}')
+        response_data = {
+            'success': False,
+            'message': 'Failed to connect with google drive'
+        }
+        response = jsonify(response_data)
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+    response = jsonify(response_data)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    return response, 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)

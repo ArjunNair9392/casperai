@@ -222,7 +222,7 @@ def get_files_from_drive(service):
 
 
 # Function to fetch Google Drive credentials
-def get_google_drive_credentials(user_email, code):
+def get_google_drive_credentials(user_email):
     db = connect_to_mongodb()
 
     result = fetch_token(db, user_email)
@@ -232,11 +232,13 @@ def get_google_drive_credentials(user_email, code):
         refresh_token = result["refresh_token"]
 
     else:
-        logger.info("fetching token from google api")
-        token_result = get_token(code)
-        token = token_result.get("access_token")
-        refresh_token = token_result.get("refresh_token")
-        persist_token(db, user_email, token, refresh_token)
+        token = ""
+        refresh_token = ""
+        # logger.info("fetching token from google api")
+        # token_result = get_token(code)
+        # token = token_result.get("access_token")
+        # refresh_token = token_result.get("refresh_token")
+        # persist_token(db, user_email, token, refresh_token)
 
     creds = Credentials(
         token=token,
