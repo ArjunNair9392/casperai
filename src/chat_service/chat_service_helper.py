@@ -235,3 +235,42 @@ def remove_ask_prefix(channel_name):
         return channel_name[4:]
     else:
         return channel_name
+
+
+def add_users(db, user_emails, slack_user_id, team_id, team_name, slack_app_opened, company_id):
+    try:
+        # TODO: store map for slack id and name
+        collection = db['users']
+        for user_email in user_emails:
+            if collection.find_one({'user_email': user_email}) is None:
+                document = {
+                    'user_email': user_email,
+                    'slack_user_id': slack_user_id,
+                    'slack_workspace': {team_id: team_name},
+                    'company_id': company_id,
+                    'is_verified': False,
+                    'slack_app_opened': slack_app_opened
+                }
+                insert_result = collection.insert_one(document)
+                return str(insert_result.inserted_id)
+            else:
+                print(f'User already exists: {user_email}')
+    except Exception as e:
+        print(f'Failed to insert user : {user_email}')
+        print(e)
+
+
+def list_channels_for_user(db, user_email):
+    try:
+        users_collection = db['users']
+        user = users_collection.find_one({"user_email": user_email})
+        company_id = user['company_id']
+        collection = db['channels']
+
+        # Query to find all documents with the specified company_name
+        query = {'company_id': company_id}
+        channels = collection.find(query)
+        return channels
+    except Exception as e:
+        print(f'Failed to list channels for user : {user_email}')
+        print(e)

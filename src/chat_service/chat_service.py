@@ -1,10 +1,9 @@
 import os
 import flask
 import slack
-import threading
 
 from dotenv import load_dotenv
-from flask import request, Flask, jsonify, Response
+from flask import request, Flask, Response, jsonify
 
 # Slack Libraries
 from slack_bolt import App
@@ -14,7 +13,7 @@ from requests_futures.sessions import FuturesSession
 
 # Local Python files
 from chat_service_helper import connect_to_mongodb, remove_ask_prefix, fetch_index_name, multi_modal_rag_chain, \
-    get_retriever, get_vectorestore
+    get_retriever, get_vectorestore, add_users, list_channels_for_user
 
 app = Flask(__name__)
 
@@ -35,102 +34,94 @@ def slack_events():
     return handler.handle(request)
 
 
-# Event listener for app installation
 @slack_app.event("app_home_opened")
 def handle_channel_creation(event, say):
-    # Get the user ID of the installer
+    # TODO: ONly create a channel when the admin of the channel opens the app.
     user_id = event["user"]
     slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
     slack_user_client = WebClient(token=os.getenv("SLACK_USER_TOKEN"))
-
     try:
-        # Get user info using the bot token
         user_info_response = slack_bot_client.users_info(user=user_id)
-
-        # Check if the API call was successful
         if not user_info_response["ok"]:
             raise Exception("Failed to fetch user info")
-
         user_info = user_info_response["user"]
         user_email = user_info["profile"]["email"]
-
+        auth_test_response = slack_bot_client.auth_test()
+        team_id = auth_test_response['team_id']
+        team_name = auth_test_response['team']
         db = connect_to_mongodb()
-
-        # Fetch user details from the database
         users_collection = db['users']
         user = users_collection.find_one({"user_email": user_email})
-
-        # Handle case where the user is not found in the database
         if not user:
-            print(f"User with email {user_email} not found in the database.")
-            return
-
-        company_id = user.get('company_id')
-
-        # Handle case where company_id is not found
-        if not company_id:
-            print(f"Company ID not found for user {user_email}.")
-            return
-
-        channels_collection = db['channels']
-        channels = list(channels_collection.find({"company_id": company_id}))
-
-        if not user.get('slack_app_opened'):
-            welcome_message = f"We have created {len(channels)} channels for you!"
+            add_users(db, [user_email], user_id, team_id, team_name, False, '')
+            welcome_message = (f"Welcome to CasperAI. Please visit this dashboard to create new channels and add files "
+                               f"to be trained by our model, backed by chatGPT!")
             slack_bot_client.chat_postEphemeral(channel=user_id, text=welcome_message, user=user_id)
-            users_collection.update_one(
-                {"user_email": user_email},
-                {"$set": {"slack_app_opened": True}}
-            )
+        else:
+            if team_id not in user.get('slack_workspace', {}):
+                users_collection.update_one(
+                    {"user_email": user_email},
+                    {"$set": {f"slack_workspace.{team_id}": team_name}}
+                )
 
-        if channels:
-            for channel in channels:
-                if channel.get('slack_channel_id') == "":
-                    try:
-                        # Create a private channel
-                        channel_name = f"ask_{channel['channel_name'].replace(' ', '_').lower()}"
-                        response = slack_user_client.conversations_create(
-                            name=channel_name,
-                            is_private=True
-                        )
+            if not user.get('slack_app_opened'):
+                company_id = user.get('company_id')
+                if not company_id:
+                    print(f"Company ID not found for user {user_email}.")
+                    return
+                channels_collection = db['channels']
+                channels = list(channels_collection.find({"company_id": company_id}))
+                if channels:
+                    for channel in channels:
+                        if channel.get('slack_channel_id') == "" and channel.get('slack_workspace', {}).get(team_id) is not None:
+                            try:
+                                # Create a private channel
+                                channel_name = f"ask_{channel['channel_name'].replace(' ', '_').lower()}"
+                                response = slack_user_client.conversations_create(
+                                    name=channel_name,
+                                    is_private=True
+                                )
 
-                        slack_channel_id = response["channel"]["id"]
+                                slack_channel_id = response["channel"]["id"]
+                                auth_response = slack_bot_client.auth_test()
+                                bot_user_id = auth_response['user_id']
+                                slack_user_client.conversations_invite(
+                                    channel=slack_channel_id,
+                                    users=bot_user_id
+                                )
+                                channel_info = slack_user_client.conversations_members(channel=slack_channel_id)
+                                if user_id not in channel_info["members"]:
+                                    # Invite the user to the private channel if not already a member
+                                    slack_user_client.conversations_invite(
+                                        channel=slack_channel_id,
+                                        users=user_id
+                                    )
+                                else:
+                                    print(f"User {user_email} is already a member of the channel {channel_name}.")
 
-                        # Get the bot user ID
-                        auth_response = slack_bot_client.auth_test()
-                        bot_user_id = auth_response['user_id']
+                                # Update the channel document with the Slack channel ID
+                                channels_collection.update_one(
+                                    {"_id": channel['_id']},
+                                    {"$set": {"slack_channel_id": slack_channel_id}}
+                                )
 
-                        # Invite the bot to the private channel
-                        slack_user_client.conversations_invite(
-                            channel=slack_channel_id,
-                            users=bot_user_id
-                        )
-                        channel_info = slack_user_client.conversations_members(channel=slack_channel_id)
-                        if user_id not in channel_info["members"]:
-                            # Invite the user to the private channel if not already a member
-                            slack_user_client.conversations_invite(
-                                channel=slack_channel_id,
-                                users=user_id
-                            )
-                        else:
-                            print(f"User {user_email} is already a member of the channel {channel_name}.")
+                                # Send a welcome message in the channel
+                                welcome_message = "Welcome to our Slack workspace! We are excited to have you here."
+                                slack_user_client.chat_postEphemeral(channel=slack_channel_id, text=welcome_message,
+                                                                     user=user_id)
 
-                        # Update the channel document with the Slack channel ID
-                        channels_collection.update_one(
-                            {"_id": channel['_id']},
-                            {"$set": {"slack_channel_id": slack_channel_id}}
-                        )
+                            except slack.errors.SlackApiError as e:
+                                if 'channel_already_exists' in str(e):
+                                    print("Private channel already exists")
+                                else:
+                                    print(f"Error creating channel: {e}")
+                welcome_message = f"Welcome to CasperAI. Already added user!"
+                slack_bot_client.chat_postEphemeral(channel=user_id, text=welcome_message, user=user_id)
+                users_collection.update_one(
+                    {"user_email": user_email},
+                    {"$set": {"slack_app_opened": True}}
+                )
 
-                        # Send a welcome message in the channel
-                        welcome_message = "Welcome to our Slack workspace! We are excited to have you here."
-                        slack_user_client.chat_postEphemeral(channel=slack_channel_id, text=welcome_message,
-                                                             user=user_id)
-
-                    except slack.errors.SlackApiError as e:
-                        if 'channel_already_exists' in str(e):
-                            print("Private channel already exists")
-                        else:
-                            print(f"Error creating channel: {e}")
     except Exception as e:
         print(f"An error occurred: {e}")
 
@@ -138,13 +129,17 @@ def handle_channel_creation(event, say):
 # Event listener for member joining a channel
 @slack_app.event("message")
 def handle_member_joined_channel(body, log):
-    user_id = body['event']['user']
+    slack_user_id = body['event']['user']
     channel_id = body['event']['channel']
     channel_sub_type = body['event']['subtype']
     slack_user_client = WebClient(token=os.getenv("SLACK_USER_TOKEN"))
     slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
-    user_info = slack_bot_client.users_info(user=user_id)
+    user_info = slack_bot_client.users_info(user=slack_user_id)
     user_email = user_info['user']['profile']['email']
+    auth_test_response = slack_bot_client.auth_test()
+    team_name = auth_test_response['team']
+    team_id = auth_test_response['team_id']
+
     db = connect_to_mongodb()
     channels_collection = db['channels']
     channel = channels_collection.find_one({'slack_channel_id': channel_id})
@@ -160,25 +155,20 @@ def handle_member_joined_channel(body, log):
         result = users_collection.delete_one({'user_email': user_email})
         print(f"User {user_email} left channel {channel_id}")
         return
-    elif user is None:
-        new_user = {
-            "user_email": user_email,
-            "company_id": channel['company_id'],
-            "is_verified": False,
-            "slack_app_opened": True
-        }
-
-        # Insert the new user document into the user collection
-        insert_result = users_collection.insert_one(new_user)
-
-        # Get the _id of the newly created document
-        new_user_id = insert_result.inserted_id
-
+    elif user is None and channel_sub_type == "channel_join":
+        db_user_id = add_users(db, [user_email], slack_user_id, team_id, team_name, False, channel['company_id'])
         print(f"User {user_email} joined channel {channel_id}")
-        result = channels_collection.update_one(
-            {"_id": channel['_id']},
-            {"$addToSet": {"member_ids": str(new_user_id)}}
-        )
+    else:
+        db_user_id = str(user['_id'])
+
+    channels_collection.update_one(
+        {"_id": channel['_id']},
+        {"$addToSet": {"member_ids": db_user_id}}
+    )
+    users_collection.update_one(
+        {"user_email": user_email},
+        {"$set": {"company_id": channel['company_id']}}
+    )
 
 
 @app.route('/ask-casper', methods=['POST'])

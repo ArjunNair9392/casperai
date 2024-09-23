@@ -1,21 +1,23 @@
+import os
 from bson import ObjectId
 from flask import Flask, request, jsonify, abort, make_response
 from flask_cors import CORS
+from dotenv import load_dotenv
+from slack_sdk import WebClient
 
 from logging_config import logger
-from registration_service_helper import connect_to_mongodb, persist_company_info, add_users, get_company_for_user, \
-    persist_channel_info, list_channel_names, get_documents_by_channel, get_token, persist_token, fetch_token
+from registration_service_helper import connect_to_mongodb, persist_company_info, get_company_for_user, \
+    persist_channel_info, list_channels_for_user, get_documents_by_channel, get_token, persist_token, fetch_token, \
+    add_slack_channel
 
 app = Flask(__name__)
 CORS(app)
+load_dotenv()
 
 
 @app.route('/company-registration', methods=['POST'])
 def register_company():
-    # Get data from request
     data = request.get_json()
-
-    # Extract parameters
     name = data.get('company')
     address = data.get('address')
     city = data.get('city')
@@ -25,11 +27,16 @@ def register_company():
     admin_email = data.get('admin_email')
     db = connect_to_mongodb()
     collection = db['companies']
-    # Check if a document with the same name and admin_email already exists
     existing_document = collection.find_one({'name': name, 'admin_email': admin_email})
     if existing_document is None:
-        company_id = persist_company_info(db, name, address, city, state, phone_number, admin_email)
-        add_users(db, [admin_email], company_id)
+        company_id = persist_company_info(db, name, address, city, state, country, phone_number, admin_email)
+        users_collection = db['users']
+        user = users_collection.find_one({"user_email": admin_email})
+        if user:
+            users_collection.update_one(
+                {"user_email": admin_email},
+                {"$set": {"company_id": company_id}}
+            )
 
         data = {
             'success': True,
@@ -39,7 +46,6 @@ def register_company():
         response = jsonify(data)
         response.headers.add('Access-Control-Allow-Origin', '*')
     else:
-        # Document with the same name and admin_email already exists
         print(f'Company info for {name} with admin_email {admin_email} already exists.')
         company_id = str(existing_document['_id'])
         data = {
@@ -53,13 +59,12 @@ def register_company():
 
 @app.route('/add-channel', methods=['POST'])
 def add_channel():
-    # Get data from request
     data = request.get_json()
-
-    # Extract parameters
     channel_name = data.get('channel_name')
     admin_email = data.get('admin_email')
+    slack_workspace = data.get('slack_workspace')
 
+    slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
     db = connect_to_mongodb()
     company_info = get_company_for_user(db, admin_email)
     company_id = str(company_info['_id']) if '_id' in company_info and isinstance(company_info['_id'],
@@ -67,23 +72,26 @@ def add_channel():
 
     if not company_id or not channel_name or not admin_email:
         return jsonify({"error": "company_id, channel_name, and admin_email are required"}), 400
-    collection = db['channels']
-    existing_document = collection.find_one({'channel_name': channel_name, 'admin_email': admin_email, 'company_id': company_id})
+    channel_collection = db['channels']
+    users_collection = db['users']
+    user = users_collection.find_one({"user_email": admin_email})
+    existing_document = channel_collection.find_one(
+        {'channel_name': channel_name, 'admin_email': admin_email, 'company_id': company_id})
     if existing_document is None:
-        generated_id = persist_channel_info(db, channel_name, company_id, admin_email)
-
-        if generated_id:
+        channel = persist_channel_info(db, channel_name, company_id, admin_email, slack_workspace)
+        welcome_message = f"Welcome to CasperAI. We have created some channels for you!"
+        slack_bot_client.chat_postEphemeral(channel=user['slack_user_id'], text=welcome_message, user=user['slack_user_id'])
+        if channel.inserted_id:
             response_data = {
                 'success': True,
                 'message': 'Channel added successfully',
-                'id': str(generated_id)
+                'id': str(channel.inserted_id)
             }
         else:
             response_data = {
                 'success': False,
                 'message': 'Failed to add channel'
             }
-
         response = jsonify(response_data)
     else:
         response_data = {
@@ -101,7 +109,8 @@ def add_channel():
 def get_channels_for_user():
     user_email = request.args.get('user_email')
     db = connect_to_mongodb()
-    channel_names = list_channel_names(db, user_email)
+    channels = list_channels_for_user(db, user_email)
+    channel_names = [channel['channel_name'] for channel in channels]
     if channel_names:
         response = jsonify({"success": True, "channel_names": channel_names})
     else:
@@ -125,6 +134,8 @@ def get_user():
             "success": True,
             "user_id": str(user['_id']),
             "user_email": user['user_email'],
+            'slack_user_id': user['slack_user_id'],
+            'slack_workspace': user['slack_workspace'],
             "company_id": user['company_id'],
             "is_verified": user['is_verified'],
             "does_token_exist": does_token_exist
@@ -199,6 +210,7 @@ def list_files_for_channel():
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
 
+
 @app.route('/connect-gdrive', methods=['POST'])
 def connect_gdrive():
     # Get data from request
@@ -229,6 +241,7 @@ def connect_gdrive():
     response = jsonify(response_data)
     response.headers.add('Access-Control-Allow-Origin', '*')
     return response, 200
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
