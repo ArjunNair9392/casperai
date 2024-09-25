@@ -239,7 +239,6 @@ def remove_ask_prefix(channel_name):
 
 def add_users(db, user_emails, slack_user_id, team_id, team_name, slack_app_opened, company_id):
     try:
-        # TODO: store map for slack id and name
         collection = db['users']
         for user_email in user_emails:
             if collection.find_one({'user_email': user_email}) is None:

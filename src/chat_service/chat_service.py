@@ -36,7 +36,6 @@ def slack_events():
 
 @slack_app.event("app_home_opened")
 def handle_channel_creation(event, say):
-    # TODO: ONly create a channel when the admin of the channel opens the app.
     user_id = event["user"]
     slack_bot_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN"))
     slack_user_client = WebClient(token=os.getenv("SLACK_USER_TOKEN"))
@@ -73,7 +72,9 @@ def handle_channel_creation(event, say):
                 channels = list(channels_collection.find({"company_id": company_id}))
                 if channels:
                     for channel in channels:
-                        if channel.get('slack_channel_id') == "" and channel.get('slack_workspace', {}).get(team_id) is not None:
+                        if channel.get('slack_channel_id') == "" \
+                                and channel.get('slack_workspace', {}).get(team_id) is not None \
+                                and user_email == channel.get('admin_email'):
                             try:
                                 # Create a private channel
                                 channel_name = f"ask_{channel['channel_name'].replace(' ', '_').lower()}"
